@@ -5,6 +5,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.system.Os;
+import android.system.OsConstants;
 import android.view.View;
 import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
@@ -114,6 +116,11 @@ public final class ResourceManagerActivity extends AppCompatActivity {
     };
 
     private boolean launchGame() {
+        if (BuildConfig.OFFICIAL_ENGINE && Os.sysconf(OsConstants._SC_PAGESIZE) != 4096L) {
+            new MaterialAlertDialogBuilder(this).setMessage(R.string.game_runtime_page_size)
+                    .setPositiveButton(android.R.string.ok, null).show();
+            return false;
+        }
         File library = new File(getApplicationInfo().nativeLibraryDir, "libnovahd.so");
         try (InputStream image = getAssets().open("image.bin")) {
             if (!library.isFile() || image.read() == -1) throw new IOException();

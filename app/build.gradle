@@ -5,6 +5,7 @@ plugins {
 
 def nativeInput = layout.projectDirectory.dir(
     providers.gradleProperty("novaNativeDir").getOrElse("../build/recovery/android"))
+def officialEngine = providers.gradleProperty("novaOfficialEngine").orElse("false").get().toBoolean()
 def recoveryKeystore = providers.environmentVariable("NOVA_SIGNING_KEYSTORE").orNull
 
 android {
@@ -17,7 +18,8 @@ android {
         minSdk 26
         targetSdk 34
         versionCode 5
-        versionName "0.5-recovery"
+        versionName(officialEngine ? "0.5-recovery-arm64-4k" : "0.5-recovery")
+        buildConfigField "boolean", "OFFICIAL_ENGINE", officialEngine.toString()
         
         ndk {
             abiFilters "arm64-v8a"
@@ -65,11 +67,13 @@ android {
 
     buildFeatures {
         viewBinding true
+        buildConfig true
     }
 
     packagingOptions {
         jniLibs {
             useLegacyPackaging = true
+            if (officialEngine) keepDebugSymbols += ["**/libnovahd.so"]
         }
     }
 }
@@ -79,7 +83,7 @@ def verifyRecoveryInputs = tasks.register("verifyRecoveryInputs") {
         def lib = nativeInput.file("jni/arm64-v8a/libnovahd.so").asFile
         def image = nativeInput.file("assets/image.bin").asFile
         if (!lib.isFile() || lib.length() == 0 || !image.isFile() || image.length() == 0) {
-            throw new GradleException("Recovery requires ARM64 libnovahd.so and image.bin built from the original iPad Mach-O. See docs/RECOVERY-v0.5.md.")
+            throw new GradleException("Recovery requires ARM64 libnovahd.so and image.bin. See the Recovery build guides.")
         }
         if (!nativeInput.file("assets/NovaHD.app/Info.plist").asFile.isFile()) {
             throw new GradleException("Recovery requires the verified original campaign assets. See docs/RECOVERY-v0.5.md.")

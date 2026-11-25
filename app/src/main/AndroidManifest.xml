@@ -4,6 +4,7 @@
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
     
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-feature android:glEsVersion="0x00010001" android:required="true" />
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_nova_logo"
@@ -25,9 +26,9 @@
 
         <activity
             android:name=".GameActivity"
-            android:exported="false"
+            android:exported="false" android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"
-            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|density"
+            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout|navigation|uiMode|density"
             android:theme="@style/Theme.NOVAHD.Game.Fullscreen">
             <meta-data android:name="android.app.lib_name" android:value="novahd" />
         </activity>

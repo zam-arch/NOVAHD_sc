@@ -45,4 +45,5 @@
     <string name="offline_mode">Modo offline: recursos disponibles</string>
     <string name="game_runtime_missing_title">Motor del juego no disponible</string>
     <string name="game_runtime_missing_message">La instalación no contiene el motor ARM64 o la imagen del juego. Instala un APK Recovery completo.</string>
+    <string name="game_runtime_page_size">Este motor 0.4 requiere páginas de memoria de 4 KiB. La campaña no se puede iniciar en este dispositivo con el motor original.</string>
 </resources>

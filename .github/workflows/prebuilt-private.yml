@@ -1,0 +1,78 @@
+name: Private Recovery with the official 0.4 engine
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: authorized-recovery
+    steps:
+      - name: Require an authorized private repository
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          if [[ "$IS_PRIVATE" != true ]]; then
+            echo "::error::This workflow handles original game files and requires an authorized private repository."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.8'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0 ndk;28.2.13676358'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.5'
+          cache-disabled: true
+
+      - name: Stage the authorized original APK
+        env:
+          ORIGINAL_APK_URL: ${{ secrets.NOVA_OFFICIAL_APK_HTTPS_URL }}
+        run: |
+          [[ "$ORIGINAL_APK_URL" == https://* ]] || {
+            echo "::error::Configure a direct HTTPS URL for your authorized copy of the official APK."
+            exit 1
+          }
+          apk="$RUNNER_TEMP/original.apk"
+          curl --fail --silent --proto '=https' --connect-timeout 15 --max-time 600 --retry 3 --max-filesize 230000000 -o "$apk" -- "$ORIGINAL_APK_URL"
+          python tools/recomp/stage_official_apk.py "$apk" app/src/main/assets/campaign.tsv --stage build/prebuilt/android
+          rm -f "$apk"
+
+      - name: Assemble and verify the 4 KiB experiment
+        env:
+          KEYSTORE_B64: ${{ secrets.NOVA_SIGNING_KEYSTORE_B64 }}
+          NOVA_SIGNING_STORE_PASSWORD: ${{ secrets.NOVA_SIGNING_STORE_PASSWORD }}
+          NOVA_SIGNING_ALIAS: ${{ secrets.NOVA_SIGNING_ALIAS }}
+          NOVA_SIGNING_KEY_PASSWORD: ${{ secrets.NOVA_SIGNING_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$KEYSTORE_B64" ]]; then
+            umask 077
+            export NOVA_SIGNING_KEYSTORE="$RUNNER_TEMP/recovery.keystore"
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$NOVA_SIGNING_KEYSTORE"
+          fi
+          gradle :app:assembleRelease --no-daemon -PnovaOfficialEngine=true -PnovaNativeDir=../build/prebuilt/android
+          apk=app/build/outputs/apk/release/app-release.apk
+          python tools/recomp/stage_official_apk.py "$apk" app/src/main/assets/campaign.tsv
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --print-certs "$apk"
+          "$ANDROID_HOME/build-tools/34.0.0/zipalign" -c 4 "$apk"
+          mkdir -p build/prebuilt/delivery
+          cp "$apk" build/prebuilt/delivery/NOVA-HD-v0.5-Recovery-ARM64-4KiB.apk
+          (cd build/prebuilt/delivery && sha256sum NOVA-HD-v0.5-Recovery-ARM64-4KiB.apk > SHA256SUMS)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: private-nova-hd-recovery-arm64-4k
+          path: build/prebuilt/delivery/
+          if-no-files-found: error
+          retention-days: 3

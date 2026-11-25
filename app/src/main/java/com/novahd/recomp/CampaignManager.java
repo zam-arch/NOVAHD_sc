@@ -20,7 +20,7 @@ final class CampaignManager {
     private interface Job { void run() throws IOException; }
 
     private final Context context;
-    private final File root;
+    private final File root, campaignRoot;
     private final CampaignDownload download;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private CampaignFiles files;
@@ -34,17 +34,18 @@ final class CampaignManager {
     private CampaignManager(Context context) {
         this.context = context;
         root = context.getFilesDir();
+        File external = context.getExternalFilesDir(null);
+        campaignRoot = BuildConfig.OFFICIAL_ENGINE && external != null ? external : root;
         download = new CampaignDownload(root);
         run(false, false, () -> {
             CampaignFiles.remove(new File(root, "campaign-import.zip"));
             try (BufferedReader manifest = new BufferedReader(new InputStreamReader(
                     context.getAssets().open("campaign.tsv"), StandardCharsets.UTF_8))) {
-                files = new CampaignFiles(root, manifest);
+                files = new CampaignFiles(campaignRoot, manifest);
             }
             files.recover();
             ready = files.verify(this::check);
-            File external = context.getExternalFilesDir(null);
-            if (!ready && external != null) {
+            if (!ready && external != null && !campaignRoot.equals(external)) {
                 File previous = new File(external, "NovaHD.app");
                 if (files.verify(previous, this::check)) {
                     status = "Migrando la campaña instalada…";
@@ -73,6 +74,12 @@ final class CampaignManager {
     void verifyForLaunch() {
         run(false, false, () -> {
             ready = false;
+            if (BuildConfig.OFFICIAL_ENGINE) {
+                File external = context.getExternalFilesDir(null);
+                File current = external == null ? root : external;
+                if (!campaignRoot.equals(current))
+                    throw new IOException("Cambió el almacenamiento de la campaña. Cierra la aplicación y vuelve a abrirla.");
+            }
             status = "Verificando campaña…";
             ready = files.verify(this::check);
             if (!ready) installEmbedded();
@@ -83,6 +90,7 @@ final class CampaignManager {
     void fromDocument(Uri document) {
         run(false, true, () -> {
             status = "Leyendo la copia seleccionada…";
+            CampaignFiles.requireSpace(campaignRoot, files.installSize());
             File archive = new File(root, "campaign-import.zip");
             try {
                 try (InputStream input = context.getContentResolver().openInputStream(document)) {
@@ -96,7 +104,7 @@ final class CampaignManager {
                             bytes += n;
                             if (bytes > CampaignFiles.ARCHIVE_LIMIT)
                                 throw new IOException("El archivo supera el límite de 512 MiB.");
-                            CampaignFiles.requireSpace(root, files.installSize() + n);
+                            CampaignFiles.requireSpace(root, (campaignRoot.equals(root) ? files.installSize() : 0) + n);
                             output.write(block, 0, n);
                         }
                     }
@@ -111,6 +119,7 @@ final class CampaignManager {
     void fromNetwork() {
         String source = source();
         run(true, true, () -> {
+            CampaignFiles.requireSpace(campaignRoot, files.installSize());
             File archive = null;
             for (int attempt = 0; attempt < 3; attempt++) {
                 check();
@@ -118,7 +127,7 @@ final class CampaignManager {
                 speed = 0;
                 status = "Conectando con la fuente autorizada…";
                 try {
-                    archive = download.fetch(source, files.installSize(), this::check, this::progress);
+                    archive = download.fetch(source, campaignRoot.equals(root) ? files.installSize() : 0, this::check, this::progress);
                     break;
                 } catch (CampaignDownload.Rejected | CampaignFiles.StorageException error) {
                     throw error;
