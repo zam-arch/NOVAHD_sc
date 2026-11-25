@@ -45,9 +45,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          ndk: ${{ env.NDK_VERSION }}
-          platforms: "android-${{ env.API_LEVEL }}"
+          cmdline-tools-version: "latest"
           accept-android-sdk-licenses: "true"
+          packages: "platforms;android-26 ndk;27.0.12077973 build-tools;34.0.0"
       
       - name: Install Python dependencies
         run: |
@@ -111,9 +111,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          ndk: ${{ env.NDK_VERSION }}
-          platforms: "android-${{ env.API_LEVEL }}"
+          cmdline-tools-version: "latest"
           accept-android-sdk-licenses: "true"
+          packages: "platforms;android-26 ndk;27.0.12077973 build-tools;34.0.0"
       
       - name: Install Python dependencies
         run: |
@@ -182,9 +182,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          ndk: ${{ env.NDK_VERSION }}
-          platforms: "android-${{ env.API_LEVEL }}"
+          cmdline-tools-version: "latest"
           accept-android-sdk-licenses: "true"
+          packages: "platforms;android-26 build-tools;34.0.0"
       
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
@@ -240,18 +240,41 @@ jobs:
       - name: Build Android App (Gradle)
         run: |
           cd ${{ github.workspace }}
-          ./gradlew :app:assembleRelease --no-daemon -x lint --info
+          ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon -x lint --info
+      
+      - name: Find APK
+        if: always()
+        run: |
+          echo "Searching for APK files..."
+          find . -name "*.apk" -type f 2>/dev/null | head -20
+          echo "---"
+          ls -la app/build/outputs/apk/ 2>/dev/null || echo "app/build/outputs/apk not found"
+          ls -la app/build/outputs/ 2>/dev/null || echo "app/build/outputs not found"
+        id: find-apk
       
       - name: Verify APK
         if: always()
         run: |
-          ls -la app/build/outputs/apk/release/
+          # Try release first, then debug
+          APK_PATH=""
           if [ -f app/build/outputs/apk/release/app-release.apk ]; then
-            echo "APK built successfully: app/build/outputs/apk/release/app-release.apk"
-            echo "APK_SIZE=$(stat -c%s app/build/outputs/apk/release/app-release.apk)" >> $GITHUB_OUTPUT
-            echo "APK_PATH=app/build/outputs/apk/release/app-release.apk" >> $GITHUB_OUTPUT
+            APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          elif [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
           else
-            echo "APK not found"
+            # Fallback: find any APK
+            FOUND=$(find app/build/outputs -name "*.apk" -type f 2>/dev/null | head -1)
+            if [ -n "$FOUND" ]; then
+              APK_PATH="$FOUND"
+            fi
+          fi
+          
+          if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
+            echo "APK built successfully: $APK_PATH"
+            echo "APK_SIZE=$(stat -c%s "$APK_PATH")" >> $GITHUB_OUTPUT
+            echo "APK_PATH=$APK_PATH" >> $GITHUB_OUTPUT
+          else
+            echo "APK not found in any output directory"
             exit 1
           fi
         id: verify
