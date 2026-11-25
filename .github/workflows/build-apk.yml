@@ -186,8 +186,8 @@ jobs:
           accept-android-sdk-licenses: "true"
           packages: "platforms;android-26 build-tools;34.0.0"
       
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+      - name: Setup Gradle (v4)
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
       
@@ -211,6 +211,7 @@ jobs:
         uses: actions/download-artifact@v4
         id: download-native-linux
         continue-on-error: true
+        if: github.event.inputs.exe != ''
         with:
           name: libnovahd-so-${{ github.sha }}
           path: build/apk
@@ -219,6 +220,7 @@ jobs:
         uses: actions/download-artifact@v4
         id: download-native-windows
         continue-on-error: true
+        if: github.event.inputs.exe != ''
         with:
           name: libnovahd-so-windows-${{ github.sha }}
           path: build/apk
@@ -236,9 +238,6 @@ jobs:
             echo "WARNING: libnovahd.so not found - APK will be built without native library"
             echo "The ResourceManager will work but GameActivity will require libnovahd.so at runtime"
           fi
-      
-      - name: Make gradlew executable
-        run: chmod +x ${{ github.workspace }}/gradlew
       
       - name: Build Android App (Gradle)
         run: |
