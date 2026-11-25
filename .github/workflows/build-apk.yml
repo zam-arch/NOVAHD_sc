@@ -45,10 +45,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          ndk-version: ${{ env.NDK_VERSION }}
-          api-level: ${{ env.API_LEVEL }}
-          platform-tools: true
-          build-tools: "34.0.0"
+          ndk: ${{ env.NDK_VERSION }}
+          platforms: "android-${{ env.API_LEVEL }}"
+          accept-android-sdk-licenses: "true"
       
       - name: Install Python dependencies
         run: |
@@ -112,10 +111,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          ndk-version: ${{ env.NDK_VERSION }}
-          api-level: ${{ env.API_LEVEL }}
-          platform-tools: true
-          build-tools: "34.0.0"
+          ndk: ${{ env.NDK_VERSION }}
+          platforms: "android-${{ env.API_LEVEL }}"
+          accept-android-sdk-licenses: "true"
       
       - name: Install Python dependencies
         run: |
@@ -184,8 +182,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          ndk-version: ${{ env.NDK_VERSION }}
-          api-level: ${{ env.API_LEVEL }}
+          ndk: ${{ env.NDK_VERSION }}
+          platforms: "android-${{ env.API_LEVEL }}"
+          accept-android-sdk-licenses: "true"
       
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
@@ -241,7 +240,7 @@ jobs:
       - name: Build Android App (Gradle)
         run: |
           cd ${{ github.workspace }}
-          ./gradlew :app:assembleRelease --no-daemon -x lint
+          ./gradlew :app:assembleRelease --no-daemon -x lint --info
       
       - name: Verify APK
         if: always()
