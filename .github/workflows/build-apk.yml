@@ -237,6 +237,9 @@ jobs:
             echo "The ResourceManager will work but GameActivity will require libnovahd.so at runtime"
           fi
       
+      - name: Make gradlew executable
+        run: chmod +x ${{ github.workspace }}/gradlew
+      
       - name: Build Android App (Gradle)
         run: |
           cd ${{ github.workspace }}
