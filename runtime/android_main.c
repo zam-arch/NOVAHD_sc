@@ -623,6 +623,7 @@ static void make_dir(const char *base, const char *sub) {
     if (mkdir(p, 0770) && errno != EEXIST) rt_log("android: cannot create %s (%s)", p, strerror(errno));
 }
 
+#ifndef NOVA_MANAGED_BUNDLE
 /* The game bundle packed in the APK (build_apk.py --bundle): assets/bundle.lst has one "<size> <relative path>" line
  * per file under assets/NovaHD.app. Files that are missing or of another size are copied out once, because the game
  * reads its data with fopen. */
@@ -664,11 +665,17 @@ static void extract_bundle(const char *bundle) {
     if (copied || failed) rt_log("android: game bundle extracted from the APK: %d files copied, %d failed", copied, failed);
 }
 
+#endif
+
 static void setup_paths(void) {
     const char *files = app_state->activity->externalDataPath;
     if (!files || !files[0]) files = app_state->activity->internalDataPath;
     static char bundle[512], home[512];
+#ifdef NOVA_MANAGED_BUNDLE
+    snprintf(bundle, sizeof bundle, "%s/NovaHD.app", app_state->activity->internalDataPath);
+#else
     snprintf(bundle, sizeof bundle, "%s/NovaHD.app", files);
+#endif
     snprintf(home, sizeof home, "%s/home", files);
     make_dir(files, "");
     make_dir(home, "");
@@ -680,12 +687,18 @@ static void setup_paths(void) {
     snprintf(rt_home_path, sizeof rt_home_path, "%s", GAME_HOME);
     rt_path_alias(GAME_BUNDLE, bundle);
     rt_path_alias(GAME_HOME, home);
+#ifndef NOVA_MANAGED_BUNDLE
     extract_bundle(bundle);
+#endif
     char probe[600];
     struct stat st;
     snprintf(probe, sizeof probe, "%s/Info.plist", bundle);
     if (stat(probe, &st))
+#ifdef NOVA_MANAGED_BUNDLE
+        rt_fatal("android: verified campaign bundle missing: %s", probe);
+#else
         rt_log("android: the game bundle is missing: adb push NovaHD.app %s/ (so that %s exists)", files, probe);
+#endif
     rt_log("android: bundle %s, home %s", bundle, home);
 }
 

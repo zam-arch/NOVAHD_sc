@@ -19,7 +19,7 @@
     <string name="btn_resume">REANUDAR</string>
     <string name="btn_cancel">CANCELAR</string>
     <string name="btn_retry">REINTENTAR</string>
-    <string name="btn_import">IMPORTAR COPIA</string>
+    <string name="btn_import">IMPORTAR ARCHIVO</string>
     <string name="btn_repair">REPARAR</string>
     <string name="btn_play">JUGAR</string>
     <string name="btn_settings">CONFIGURACIÓN</string>
@@ -32,11 +32,11 @@
     <string name="error_extract">Error al extraer archivos.</string>
     <string name="error_permission">Permiso denegado.</string>
     <string name="settings_title">Configuración</string>
-    <string name="settings_download_url">URL de descarga</string>
+    <string name="settings_download_url">URL HTTPS directa del archivo</string>
     <string name="settings_manifest_url">URL del manifiesto</string>
     <string name="settings_auto_repair">Reparar automáticamente</string>
     <string name="settings_notifications">Notificaciones</string>
-    <string name="about_version">Versión 0.4</string>
+    <string name="about_version">0.5 Recovery</string>
     <string name="about_credits">Basado en NOVA3_sc\nGameloft N.O.V.A. HD (iOS 1.0.6)\nRecompilación estática ARM64</string>
     <string name="import_prompt">Selecciona la carpeta NovaHD.app de tu copia legítima</string>
     <string name="import_not_available">La importación de recursos aún no está disponible en esta compilación.</string>
@@ -44,5 +44,5 @@
     <string name="repair_complete">Reparación completada</string>
     <string name="offline_mode">Modo offline: recursos disponibles</string>
     <string name="game_runtime_missing_title">Motor del juego no disponible</string>
-    <string name="game_runtime_missing_message">Esta compilación permite probar el gestor de recursos. Para iniciar la campaña necesitas un APK con el motor y la imagen del juego.</string>
+    <string name="game_runtime_missing_message">La instalación no contiene el motor ARM64 o la imagen del juego. Instala un APK Recovery completo.</string>
 </resources>

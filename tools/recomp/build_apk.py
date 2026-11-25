@@ -128,13 +128,20 @@ def main():
     ap.add_argument("--bundle", type=Path, help="pack this NovaHD.app folder into the APK (extracted on first run)")
     ap.add_argument("--icon", type=Path, help="launcher icon, a PNG or JPEG (default: the iTunesArtwork beside the "
                                               "Payload folder of --bundle)")
+    ap.add_argument("--native-only", action="store_true",
+                    help="build the ARM64 library and image for the Gradle resource manager")
+    ap.add_argument("--ndk-version", help="select an exact installed NDK version")
     ap.add_argument("--runtime-only", action="store_true", help="reuse the translated objects of the last build")
     ap.add_argument("--install", action="store_true", help="adb install -r the APK afterwards")
     ap.add_argument("--push", type=Path, help="adb push this NovaHD.app folder to the app's files folder")
     args = ap.parse_args()
     t0 = time.time()
     sdk = sdk_root()
-    ndk = newest(sdk / "ndk")
+    ndk = sdk / "ndk" / args.ndk_version if args.ndk_version else newest(sdk / "ndk")
+    if not ndk.is_dir():
+        ap.error(f"NDK not installed: {ndk}")
+    if not args.exe.is_file():
+        ap.error("the original iPad NovaHD Mach-O is required")
     bt = newest(sdk / "build-tools")
     android_jar = newest(sdk / "platforms") / "android.jar"
     host = "windows-x86_64" if os.name == "nt" else ("darwin-x86_64" if sys.platform == "darwin" else "linux-x86_64")
@@ -174,6 +181,8 @@ def main():
     glue = ndk / "sources/android/native_app_glue"
     flags = ["-target", triple, "-O2", "-fPIC", "-g", "-Wall", "-Wno-unused-parameter", f"-I{ROOT / 'runtime'}",
              f"-I{ROOT / 'tools/recomp/runtime'}", f"-I{glue}"] + (["-DRECOMP_CHECKED"] if args.checked else [])
+    if args.native_only:
+        flags.append("-DNOVA_MANAGED_BUNDLE")
     rt_dir = out / ("obj-checked" if args.checked else "obj")
     rt_dir.mkdir(exist_ok=True)
     names = runtime_sources()
@@ -194,6 +203,9 @@ def main():
          "-lGLESv1_CM", "-laaudio", "-ldl", "-lm", "-Wl,-u,ANativeActivity_onCreate", "-Wl,--no-undefined",
          "-Wl,-z,max-page-size=16384", "-s"])
     print(f"{lib}: {lib.stat().st_size} bytes")
+
+    if args.native_only:
+        return
 
     # package: manifest + assets/image.bin + lib/arm64-v8a/libnovahd.so, aligned and signed
     exe = ".exe" if os.name == "nt" else ""

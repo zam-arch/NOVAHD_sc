@@ -2,49 +2,142 @@ name: Build N.O.V.A. HD APK (ARM64)
 
 on:
   push:
-    branches: [development, feature/android-build-verification]
+    branches: [development, recovery/v0.5]
   pull_request:
     branches: [development]
   workflow_dispatch:
+    inputs:
+      build_complete:
+        description: "Build a complete Recovery APK from an authorized IPA in a private repository"
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 env:
   GRADLE_VERSION: "8.5"
+  NDK_VERSION: "28.2.13676358"
+  IMAGE_SHA256: "8800ee114204bca4313c80b3da3fb9e2c6a39575eda2eedc2324dd27b3c65709"
 
 jobs:
-  build-app:
-    name: Build Android App (ResourceManager)
-    runs-on: ubuntu-latest
+  validate:
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
       - uses: android-actions/setup-android@v3
         with:
-          packages: "platforms;android-34 build-tools;34.0.0"
-
+          packages: "platforms;android-34 build-tools;34.0.0 ndk;28.2.13676358"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
 
-      - name: Assemble debug and release
-        run: gradle :app:assembleDebug :app:assembleRelease --no-daemon
+      - name: Compile the Android integration
+        run: gradle :app:compileDebugJavaWithJavac :app:compileReleaseJavaWithJavac --no-daemon
 
-      - name: Verify APK signature
+      - name: Exercise installer and interrupted downloads
         run: |
-          test -s app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify app/build/outputs/apk/debug/app-debug.apk
+          src=app/src/main/java/com/novahd/recomp
+          mkdir -p build/recovery-tests
+          javac -d build/recovery-tests "$src/CampaignFiles.java" "$src/CampaignDownload.java" tests/CampaignRecoveryTest.java
+          java -cp build/recovery-tests com.novahd.recomp.CampaignRecoveryTest
+
+      - name: Check ARM64 runtime sources
+        run: bash tools/recomp/check_android_runtime.sh "$ANDROID_HOME/ndk/$NDK_VERSION"
+
+      - name: Ensure Gradle refuses an incomplete APK
+        run: |
+          if gradle :app:assembleDebug --no-daemon > "$RUNNER_TEMP/verify-inputs.log" 2>&1; then
+            echo "Unexpected APK build without the engine"
+            exit 1
+          fi
+          grep -F 'Recovery requires ARM64 libnovahd.so and image.bin' "$RUNNER_TEMP/verify-inputs.log"
+
+  complete-apk:
+    if: github.event_name == 'workflow_dispatch' && inputs.build_complete
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment: authorized-recovery
+    steps:
+      - name: Require a private workspace for proprietary inputs
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          if [[ "$IS_PRIVATE" != true ]]; then
+            echo "::error::The complete Recovery APK job requires a private repository authorized to handle the original IPA and compiled engine."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.8"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-34 build-tools;34.0.0 ndk;28.2.13676358"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+
+      - name: Verify and prepare the authorized original
+        env:
+          SOURCE_IPA: ${{ secrets.NOVA_IPA_HTTPS_URL }}
+          SOURCE_SHA: ${{ secrets.NOVA_IPA_SHA256 }}
+        run: |
+          [[ "$SOURCE_IPA" == https://* && "$SOURCE_SHA" =~ ^[A-Fa-f0-9]{64}$ ]] || {
+            echo "::error::Configure NOVA_IPA_HTTPS_URL and NOVA_IPA_SHA256 for the legitimate iPad 1.0.6 IPA."
+            exit 1
+          }
+          ipa="$RUNNER_TEMP/original.ipa"
+          curl --fail --silent --proto '=https' --connect-timeout 15 --max-time 600 --retry 3 --max-filesize 536870912 -o "$ipa" -- "$SOURCE_IPA"
+          printf '%s  %s\n' "$SOURCE_SHA" "$ipa" | sha256sum -c -
+          python tools/recomp/prepare_recovery.py "$ipa" app/src/main/assets/campaign.tsv "$RUNNER_TEMP/NovaHD" build/recovery/android/assets
+          rm -f "$ipa"
+
+      - name: Recompile original ARM code and stage ARM64 engine
+        run: |
+          python -m pip install -r tools/recomp/recovery-requirements.txt
+          python tools/recomp/build_apk.py --exe "$RUNNER_TEMP/NovaHD" --out build/recovery/native --native-only --ndk-version "$NDK_VERSION"
+          printf '%s  %s\n' "$IMAGE_SHA256" build/recovery/native/image.bin | sha256sum -c -
+          ndk_bin="$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          "$ndk_bin/llvm-readelf" --dyn-syms --wide build/recovery/native/libnovahd.so > "$RUNNER_TEMP/engine-symbols"
+          grep -F ANativeActivity_onCreate "$RUNNER_TEMP/engine-symbols"
+          mkdir -p build/recovery/android/{jni/arm64-v8a,assets}
+          cp build/recovery/native/libnovahd.so build/recovery/android/jni/arm64-v8a/
+          cp build/recovery/native/image.bin build/recovery/android/assets/
+
+      - name: Assemble and verify the complete Recovery APK
+        env:
+          KEYSTORE_B64: ${{ secrets.NOVA_SIGNING_KEYSTORE_B64 }}
+          NOVA_SIGNING_STORE_PASSWORD: ${{ secrets.NOVA_SIGNING_STORE_PASSWORD }}
+          NOVA_SIGNING_ALIAS: ${{ secrets.NOVA_SIGNING_ALIAS }}
+          NOVA_SIGNING_KEY_PASSWORD: ${{ secrets.NOVA_SIGNING_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$KEYSTORE_B64" ]]; then
+            umask 077
+            export NOVA_SIGNING_KEYSTORE="$RUNNER_TEMP/recovery.keystore"
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$NOVA_SIGNING_KEYSTORE"
+          fi
+          gradle :app:assembleRelease --no-daemon
+          apk=app/build/outputs/apk/release/app-release.apk
+          python tools/recomp/verify_recovery_apk.py "$apk" "$IMAGE_SHA256"
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --print-certs "$apk"
+          mkdir -p build/recovery/delivery
+          cp "$apk" build/recovery/delivery/NOVA-HD-android-0.5-recovery.apk
+          (cd build/recovery/delivery && sha256sum NOVA-HD-android-0.5-recovery.apk > SHA256SUMS)
 
       - uses: actions/upload-artifact@v4
         with:
-          name: novahd-resource-manager-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: nova-hd-android-0.5-recovery-arm64
+          path: build/recovery/delivery/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3

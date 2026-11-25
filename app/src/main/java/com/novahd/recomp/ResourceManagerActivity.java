@@ -1,763 +1,168 @@
 package com.novahd.recomp;
 
-import android.Manifest;
-import android.app.Activity;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
-import android.provider.Settings;
-import android.util.Log;
 import android.view.View;
-import android.view.animation.AccelerateDecelerateInterpolator;
-import android.view.animation.AlphaAnimation;
-import android.view.animation.Animation;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
-
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-import androidx.core.view.WindowCompat;
-import androidx.core.view.WindowInsetsCompat;
-import androidx.core.view.WindowInsetsControllerCompat;
-
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
-import com.google.android.material.snackbar.Snackbar;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-import com.novahd.recomp.model.DownloadInfo;
-import com.novahd.recomp.model.ResourceManifest;
-import com.novahd.recomp.model.ResourceState;
-import com.novahd.recomp.service.DownloadService;
-import com.novahd.recomp.util.CryptoUtils;
-import com.novahd.recomp.util.FileUtils;
-import com.novahd.recomp.util.NetworkUtils;
+import com.google.android.material.textfield.TextInputEditText;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.Locale;
 
-public class ResourceManagerActivity extends AppCompatActivity 
-        implements DownloadService.DownloadCallback, View.OnClickListener {
-    private static final String TAG = "ResourceManagerActivity";
-    private static final int REQUEST_CODE_IMPORT = 1001;
-    private static final int REQUEST_PERMISSIONS = 1002;
-    private static final int REQUEST_NOTIFICATION_PERMISSION = 1003;
+public final class ResourceManagerActivity extends AppCompatActivity {
+    private static final int PICK_CAMPAIGN = 1;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private CampaignManager manager;
+    private boolean launching;
+    private MaterialButton primary, importFile, settings, pause, cancel;
+    private TextView title, detail, bytes, speed, eta;
+    private LinearProgressIndicator progress;
 
-    // UI Elements
-    private ImageView logoImage;
-    private TextView titleText, subtitleText, versionText;
-    private TextView statusTitle, statusDetail;
-    private LinearLayout progressContainer;
-    private TextView progressText, speedText, etaText;
-    private LinearProgressIndicator progressBar;
-    private MaterialButton primaryButton, pauseButton, cancelButton;
-    private MaterialButton importButton, repairButton, settingsButton;
-    private LinearLayout secondaryButtons, alternativeButtons;
-    private TextView offlineIndicator, creditsText;
-    private MaterialCardView statusCard;
-
-    // State
-    private ResourceState currentState = ResourceState.UNKNOWN;
-    private ResourceManifest manifest;
-    private List<DownloadInfo> downloadQueue = new ArrayList<>();
-    private DownloadService downloadService;
-    private boolean serviceBound = false;
-    private ExecutorService executor = Executors.newSingleThreadExecutor();
-    private Handler mainHandler = new Handler(Looper.getMainLooper());
-    private Gson gson = new Gson();
-    private boolean isGameReady = false;
-
-    // Animation
-    private Animation pulseAnimation;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        
-        // Edge-to-edge
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-        WindowInsetsControllerCompat insetsController = 
-            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-        if (insetsController != null) {
-            insetsController.setSystemBarsBehavior(
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-        }
-
+    @Override protected void onCreate(Bundle state) {
+        super.onCreate(state);
         setContentView(R.layout.activity_resource_manager);
-        initAnimations();
-        initViews();
-        checkPermissions();
-        loadManifest();
-        startResourceCheck();
-    }
-
-    private void initViews() {
-        logoImage = findViewById(R.id.logoImage);
-        titleText = findViewById(R.id.titleText);
-        subtitleText = findViewById(R.id.subtitleText);
-        versionText = findViewById(R.id.versionText);
-        statusTitle = findViewById(R.id.statusTitle);
-        statusDetail = findViewById(R.id.statusDetail);
-        progressContainer = findViewById(R.id.progressContainer);
-        progressText = findViewById(R.id.progressText);
-        speedText = findViewById(R.id.speedText);
-        etaText = findViewById(R.id.etaText);
-        progressBar = findViewById(R.id.progressBar);
-        primaryButton = findViewById(R.id.primaryButton);
-        pauseButton = findViewById(R.id.pauseButton);
-        cancelButton = findViewById(R.id.cancelButton);
-        secondaryButtons = findViewById(R.id.secondaryButtons);
-        importButton = findViewById(R.id.importButton);
-        repairButton = findViewById(R.id.repairButton);
-        settingsButton = findViewById(R.id.settingsButton);
-        alternativeButtons = findViewById(R.id.alternativeButtons);
-        offlineIndicator = findViewById(R.id.offlineIndicator);
-        creditsText = findViewById(R.id.creditsText);
-        statusCard = findViewById(R.id.statusCard);
-
-        primaryButton.setOnClickListener(this);
-        pauseButton.setOnClickListener(this);
-        cancelButton.setOnClickListener(this);
-        importButton.setOnClickListener(this);
-        repairButton.setOnClickListener(this);
-        settingsButton.setOnClickListener(this);
-        logoImage.setOnClickListener(v -> showAboutDialog());
-
-        // Start pulse animation on logo
-        logoImage.startAnimation(pulseAnimation);
-    }
-
-    private void initAnimations() {
-        pulseAnimation = new AlphaAnimation(0.7f, 1.0f);
-        pulseAnimation.setDuration(1500);
-        pulseAnimation.setInterpolator(new AccelerateDecelerateInterpolator());
-        pulseAnimation.setRepeatCount(Animation.INFINITE);
-        pulseAnimation.setRepeatMode(Animation.REVERSE);
-    }
-
-    private void checkPermissions() {
-        List<String> needed = new ArrayList<>();
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED) {
-                needed.add(Manifest.permission.POST_NOTIFICATIONS);
-            }
-        }
-        
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                    != PackageManager.PERMISSION_GRANTED) {
-                needed.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-            }
-        }
-        
-        if (!needed.isEmpty()) {
-            ActivityCompat.requestPermissions(this,
-                needed.toArray(new String[0]), REQUEST_PERMISSIONS);
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                           @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_PERMISSIONS) {
-            // Permissions handled, continue
-        }
-    }
-
-    private void loadManifest() {
-        // Load embedded manifest as fallback
-        try (InputStream is = getAssets().open("manifest.json")) {
-            byte[] buffer = new byte[is.available()];
-            is.read(buffer);
-            String json = new String(buffer, "UTF-8");
-            manifest = gson.fromJson(json, ResourceManifest.class);
-            Log.d(TAG, "Loaded embedded manifest: " + manifest.version);
-        } catch (IOException e) {
-            Log.w(TAG, "No embedded manifest, will fetch from network");
-            manifest = new ResourceManifest();
-        }
-    }
-
-    private void startResourceCheck() {
-        setState(ResourceState.CHECKING);
-        executor.execute(this::checkResources);
-    }
-
-    private void checkResources() {
-        if (manifest == null || manifest.files == null) {
-            // Fetch manifest from network
-            fetchManifestFromNetwork();
-            return;
-        }
-
-        File resourceDir = FileUtils.getResourceDir(this);
-        File bundleDir = FileUtils.getBundleDir(this);
-        
-        long totalRequired = manifest.getTotalRequiredSize();
-        long freeSpace = FileUtils.getFreeSpace(resourceDir);
-        
-        runOnUiThread(() -> {
-            statusDetail.setText(String.format("Espacio libre: %.2f GB / Requerido: %.2f GB",
-                freeSpace / (1024.0 * 1024 * 1024),
-                totalRequired / (1024.0 * 1024 * 1024)));
-            statusDetail.setVisibility(View.VISIBLE);
-        });
-
-        if (!FileUtils.hasEnoughSpace(resourceDir, totalRequired + 500 * 1024 * 1024)) {
-            runOnUiThread(() -> setState(ResourceState.ERROR));
-            showError("Espacio insuficiente", 
-                String.format("Se requieren %.2f GB libres. Disponible: %.2f GB",
-                    (totalRequired + 500 * 1024 * 1024) / (1024.0 * 1024 * 1024),
-                    freeSpace / (1024.0 * 1024 * 1024)));
-            return;
-        }
-
-        List<ResourceManifest.ResourceFile> missingFiles = new ArrayList<>();
-        List<ResourceManifest.ResourceFile> corruptedFiles = new ArrayList<>();
-
-        for (ResourceManifest.ResourceFile rf : manifest.files) {
-            if (!rf.required) continue;
-            File targetFile = new File(bundleDir, rf.path);
-            if (!targetFile.exists()) {
-                missingFiles.add(rf);
-            } else if (rf.sha256 != null && !rf.sha256.isEmpty()) {
-                if (!CryptoUtils.verifySha256(targetFile, rf.sha256)) {
-                    corruptedFiles.add(rf);
-                }
-            }
-        }
-
-        runOnUiThread(() -> {
-            if (missingFiles.isEmpty() && corruptedFiles.isEmpty()) {
-                isGameReady = true;
-                setState(ResourceState.READY);
-            } else if (!corruptedFiles.isEmpty()) {
-                setState(ResourceState.CORRUPTED);
-                prepareDownloadQueue(corruptedFiles);
+        manager = CampaignManager.get(this);
+        launching = state != null && state.getBoolean("launching");
+        primary = findViewById(R.id.primaryButton);
+        importFile = findViewById(R.id.importButton);
+        settings = findViewById(R.id.settingsButton);
+        pause = findViewById(R.id.pauseButton);
+        cancel = findViewById(R.id.cancelButton);
+        title = findViewById(R.id.statusTitle);
+        detail = findViewById(R.id.statusDetail);
+        bytes = findViewById(R.id.progressText);
+        speed = findViewById(R.id.speedText);
+        eta = findViewById(R.id.etaText);
+        progress = findViewById(R.id.progressBar);
+        findViewById(R.id.repairButton).setVisibility(View.GONE);
+        ((TextView) findViewById(R.id.versionText)).setText(R.string.about_version);
+        detail.setVisibility(View.VISIBLE);
+        primary.setOnClickListener(view -> {
+            if (manager.ready) {
+                launching = true;
+                manager.verifyForLaunch();
+                refresh.run();
             } else {
-                setState(ResourceState.MISSING);
-                prepareDownloadQueue(missingFiles);
+                manager.fromNetwork();
             }
         });
+        importFile.setOnClickListener(view -> chooseArchive());
+        settings.setOnClickListener(view -> configureSource());
+        pause.setOnClickListener(view -> manager.pause());
+        cancel.setOnClickListener(view -> manager.cancel());
     }
 
-    private void fetchManifestFromNetwork() {
-        ResourceManagerApplication app = ResourceManagerApplication.getInstance();
-        String manifestUrl = app.getConfig().getManifestUrl();
-        
-        NetworkUtils.fetchManifest(manifestUrl, new NetworkUtils.ManifestCallback() {
-            @Override
-            public void onSuccess(String json) {
-                manifest = gson.fromJson(json, ResourceManifest.class);
-                // Save to assets for offline use
-                saveManifestToCache(json);
-                runOnUiThread(() -> checkResources());
+    @Override protected void onSaveInstanceState(Bundle state) {
+        super.onSaveInstanceState(state);
+        state.putBoolean("launching", launching);
+    }
+
+    @Override protected void onStart() {
+        super.onStart();
+        handler.post(refresh);
+    }
+
+    @Override protected void onStop() {
+        handler.removeCallbacks(refresh);
+        super.onStop();
+    }
+
+    private final Runnable refresh = new Runnable() {
+        @Override public void run() {
+            handler.removeCallbacks(this);
+            boolean busy = manager.busy;
+            boolean ready = manager.ready;
+            boolean network = manager.network;
+            boolean configured = !manager.source().isEmpty();
+            boolean partial = !busy && manager.hasPartial();
+            if (launching && !busy) {
+                launching = false;
+                if (ready && launchGame()) return;
             }
-
-            @Override
-            public void onError(String error) {
-                runOnUiThread(() -> {
-                    setState(ResourceState.ERROR);
-                    showError("Error de red", "No se pudo obtener el manifiesto: " + error 
-                        + "\nComprueba tu conexión o importa una copia local.");
-                });
+            title.setText(ready ? R.string.resources_ready : R.string.resource_manager_title);
+            if (!manager.status.contentEquals(detail.getText())) detail.setText(manager.status);
+            visible(primary, !busy && manager.canInstall() && (ready || configured));
+            primary.setText(ready ? R.string.btn_play : partial ? R.string.btn_resume : R.string.btn_download);
+            visible(findViewById(R.id.offlineIndicator), ready && !busy);
+            visible(findViewById(R.id.alternativeButtons), !busy && manager.canInstall());
+            visible(findViewById(R.id.secondaryButtons), manager.canCancel || partial);
+            visible(pause, network);
+            visible(cancel, manager.canCancel || partial);
+            long total = manager.total, received = manager.received, rate = manager.speed;
+            visible(findViewById(R.id.progressContainer), network && total > 0);
+            if (network && total > 0) {
+                int percent = (int) Math.min(100, received * 100 / total);
+                progress.setProgressCompat(percent, false);
+                bytes.setText(getString(R.string.progress_format, mib(received), mib(total), percent));
+                speed.setText(getString(R.string.speed_format, mib(rate)));
+                visible(eta, rate > 0 && received < total);
+                if (rate > 0 && received < total) eta.setText(getString(R.string.eta_format,
+                        String.format(Locale.getDefault(), "%d s", (total - received) / rate)));
             }
-        });
-    }
-
-    private void saveManifestToCache(String json) {
-        try (FileOutputStream fos = openFileOutput("manifest.json", MODE_PRIVATE)) {
-            fos.write(json.getBytes("UTF-8"));
-        } catch (IOException e) {
-            Log.w(TAG, "Failed to cache manifest", e);
+            handler.postDelayed(this, 250);
         }
-    }
+    };
 
-    private void prepareDownloadQueue(List<ResourceManifest.ResourceFile> files) {
-        downloadQueue.clear();
-        String baseUrl = ResourceManagerApplication.getInstance().getConfig().getDownloadUrl();
-        File bundleDir = FileUtils.getBundleDir(this);
-        
-        for (ResourceManifest.ResourceFile rf : files) {
-            DownloadInfo info = new DownloadInfo();
-            info.fileId = rf.path;
-            info.url = rf.getFullUrl(baseUrl);
-            info.destinationPath = new File(bundleDir, rf.path).getAbsolutePath();
-            info.totalBytes = rf.size;
-            info.expectedSha256 = rf.sha256;
-            info.status = DownloadInfo.STATUS_PENDING;
-            downloadQueue.add(info);
-        }
-    }
-
-    private void setState(ResourceState state) {
-        currentState = state;
-        runOnUiThread(() -> updateUI());
-    }
-
-    private void updateUI() {
-        statusTitle.setText(currentState.getDisplayName());
-        
-        switch (currentState) {
-            case CHECKING:
-            case VERIFYING:
-            case EXTRACTING:
-            case REPAIRING:
-            case IMPORTING:
-                showProgressUI(true);
-                showPrimaryButton(false);
-                showSecondaryButtons(false);
-                showAlternativeButtons(true);
-                break;
-                
-            case DOWNLOADING:
-                showProgressUI(true);
-                showPrimaryButton(false);
-                showSecondaryButtons(true);
-                showAlternativeButtons(false);
-                break;
-                
-            case PAUSED:
-                showProgressUI(true);
-                primaryButton.setText(R.string.btn_resume);
-                primaryButton.setVisibility(View.VISIBLE);
-                showSecondaryButtons(false);
-                showAlternativeButtons(true);
-                break;
-                
-            case READY:
-                showProgressUI(false);
-                primaryButton.setText(R.string.btn_play);
-                primaryButton.setVisibility(View.VISIBLE);
-                isGameReady = true;
-                offlineIndicator.setVisibility(View.VISIBLE);
-                logoImage.clearAnimation();
-                showAlternativeButtons(true);
-                break;
-                
-            case MISSING:
-            case CORRUPTED:
-                showProgressUI(false);
-                primaryButton.setText(R.string.btn_download);
-                primaryButton.setVisibility(View.VISIBLE);
-                showAlternativeButtons(true);
-                break;
-                
-            case ERROR:
-                showProgressUI(false);
-                primaryButton.setText(R.string.btn_retry);
-                primaryButton.setVisibility(View.VISIBLE);
-                showAlternativeButtons(true);
-                break;
-                
-            default:
-                showProgressUI(false);
-                showPrimaryButton(false);
-                showSecondaryButtons(false);
-                showAlternativeButtons(false);
-        }
-    }
-
-    private void showProgressUI(boolean show) {
-        progressContainer.setVisibility(show ? View.VISIBLE : View.GONE);
-        statusDetail.setVisibility(show ? View.VISIBLE : View.GONE);
-    }
-
-    private void showPrimaryButton(boolean show) {
-        primaryButton.setVisibility(show ? View.VISIBLE : View.GONE);
-    }
-
-    private void showSecondaryButtons(boolean show) {
-        secondaryButtons.setVisibility(show ? View.VISIBLE : View.GONE);
-    }
-
-    private void showAlternativeButtons(boolean show) {
-        alternativeButtons.setVisibility(show ? View.VISIBLE : View.GONE);
-    }
-
-    @Override
-    public void onClick(View v) {
-        int id = v.getId();
-        if (id == R.id.primaryButton) {
-            onPrimaryAction();
-        } else if (id == R.id.pauseButton) {
-            onPauseAll();
-        } else if (id == R.id.cancelButton) {
-            onCancelAll();
-        } else if (id == R.id.importButton) {
-            onImport();
-        } else if (id == R.id.repairButton) {
-            onRepair();
-        } else if (id == R.id.settingsButton) {
-            showSettingsDialog();
-        }
-    }
-
-    private void onPrimaryAction() {
-        switch (currentState) {
-            case READY:
-                launchGame();
-                break;
-            case MISSING:
-            case CORRUPTED:
-                startDownload();
-                break;
-            case PAUSED:
-                resumeDownload();
-                break;
-            case ERROR:
-                startResourceCheck();
-                break;
-        }
-    }
-
-    private void onPauseAll() {
-        if (downloadService != null) {
-            for (DownloadInfo info : downloadQueue) {
-                if (info.status == DownloadInfo.STATUS_DOWNLOADING) {
-                    downloadService.pauseDownload(info.fileId);
-                }
-            }
-        }
-        setState(ResourceState.PAUSED);
-    }
-
-    private void onCancelAll() {
-        new MaterialAlertDialogBuilder(this)
-            .setTitle("Cancelar descargas")
-            .setMessage("¿Cancelar todas las descargas en progreso?")
-            .setPositiveButton("Sí, cancelar", (d, w) -> {
-                if (downloadService != null) {
-                    for (DownloadInfo info : downloadQueue) {
-                        downloadService.cancelDownload(info.fileId);
-                    }
-                }
-                downloadQueue.clear();
-                setState(downloadQueue.isEmpty() ? ResourceState.MISSING : ResourceState.ERROR);
-            })
-            .setNegativeButton("No", null)
-            .show();
-    }
-
-    private void onImport() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
-            | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        startActivityForResult(intent, REQUEST_CODE_IMPORT);
-    }
-
-    private void onRepair() {
-        setState(ResourceState.REPAIRING);
-        executor.execute(() -> {
-            repairResources();
-            runOnUiThread(() -> {
-                if (isGameReady) {
-                    setState(ResourceState.READY);
-                    showSnackbar("Reparación completada");
-                } else {
-                    setState(ResourceState.CORRUPTED);
-                }
-            });
-        });
-    }
-
-    private void repairResources() {
-        if (manifest == null || manifest.files == null) return;
-        
-        File bundleDir = FileUtils.getBundleDir(this);
-        List<ResourceManifest.ResourceFile> toRepair = new ArrayList<>();
-        
-        for (ResourceManifest.ResourceFile rf : manifest.files) {
-            if (!rf.required) continue;
-            File targetFile = new File(bundleDir, rf.path);
-            if (!targetFile.exists() || (rf.sha256 != null && !rf.sha256.isEmpty() 
-                    && !CryptoUtils.verifySha256(targetFile, rf.sha256))) {
-                toRepair.add(rf);
-            }
-        }
-        
-        prepareDownloadQueue(toRepair);
-        if (!downloadQueue.isEmpty()) {
-            // Download will be started from UI thread
-            runOnUiThread(this::startDownload);
-        }
-    }
-
-    private void startDownload() {
-        if (downloadQueue.isEmpty()) return;
-        
-        // Check network
-        if (!NetworkUtils.isNetworkAvailable(this)) {
-            showError("Sin conexión", getString(R.string.error_network));
-            return;
-        }
-        
-        setState(ResourceState.DOWNLOADING);
-        
-        // Start service
-        Intent serviceIntent = new Intent(this, DownloadService.class);
-        serviceIntent.setAction(DownloadService.ACTION_START);
-        for (DownloadInfo info : downloadQueue) {
-            if (info.status == DownloadInfo.STATUS_PENDING || 
-                info.status == DownloadInfo.STATUS_FAILED) {
-                serviceIntent.putExtra(DownloadService.EXTRA_DOWNLOAD_INFO, info);
-                startForegroundService(serviceIntent);
-                break; // Service processes queue sequentially
-            }
-        }
-    }
-
-    private void resumeDownload() {
-        if (downloadService != null) {
-            for (DownloadInfo info : downloadQueue) {
-                if (info.status == DownloadInfo.STATUS_PAUSED) {
-                    downloadService.retryDownload(info);
-                }
-            }
-        }
-        setState(ResourceState.DOWNLOADING);
-    }
-
-    private void launchGame() {
+    private boolean launchGame() {
         File library = new File(getApplicationInfo().nativeLibraryDir, "libnovahd.so");
         try (InputStream image = getAssets().open("image.bin")) {
-            if (!library.isFile()) throw new IOException("libnovahd.so");
-        } catch (IOException missingRuntime) {
-            showError(getString(R.string.game_runtime_missing_title),
-                getString(R.string.game_runtime_missing_message));
-            return;
+            if (!library.isFile() || image.read() == -1) throw new IOException();
+        } catch (IOException noRuntime) {
+            new MaterialAlertDialogBuilder(this).setMessage(R.string.game_runtime_missing_message)
+                    .setPositiveButton(android.R.string.ok, null).show();
+            return false;
         }
-        Intent intent = new Intent(this, GameActivity.class);
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(intent);
+        startActivity(new Intent(this, GameActivity.class));
         finish();
+        return true;
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_CODE_IMPORT && resultCode == Activity.RESULT_OK && data != null) {
-            Uri treeUri = data.getData();
-            if (treeUri != null) {
-                importFromUri(treeUri);
-            }
+    private void chooseArchive() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        startActivityForResult(intent, PICK_CAMPAIGN);
+    }
+
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request == PICK_CAMPAIGN && result == RESULT_OK && data != null) {
+            Uri archive = data.getData();
+            if (archive != null) manager.fromDocument(archive);
         }
     }
 
-    private void importFromUri(Uri treeUri) {
-        setState(ResourceState.IMPORTING);
-        getContentResolver().takePersistableUriPermission(treeUri,
-            Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        
-        executor.execute(() -> {
+    private void configureSource() {
+        View content = getLayoutInflater().inflate(R.layout.dialog_settings, null);
+        TextInputEditText input = content.findViewById(R.id.etDownloadUrl);
+        input.setText(manager.source());
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this).setTitle(R.string.settings_title)
+                .setView(content).setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(android.R.string.ok, null).create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
             try {
-                importBundle(treeUri);
-                runOnUiThread(() -> {
-                    isGameReady = true;
-                    setState(ResourceState.READY);
-                    showSnackbar(getString(R.string.import_success));
-                });
-            } catch (Exception e) {
-                Log.e(TAG, "Import failed", e);
-                runOnUiThread(() -> {
-                    setState(ResourceState.ERROR);
-                    showError("Error al importar", e.getMessage());
-                });
+                manager.setSource(input.getText().toString().trim());
+                dialog.dismiss();
+            } catch (IOException error) {
+                input.setError(error.getMessage());
             }
-        });
+        }));
+        dialog.show();
     }
 
-    private void importBundle(Uri treeUri) throws IOException {
-        throw new IOException(getString(R.string.import_not_available));
+    private static void visible(View view, boolean enabled) {
+        view.setVisibility(enabled ? View.VISIBLE : View.GONE);
     }
 
-    // DownloadService.DownloadCallback implementation
-    @Override
-    public void onProgress(DownloadInfo info) {
-        runOnUiThread(() -> updateProgressUI(info));
-    }
-
-    @Override
-    public void onCompleted(DownloadInfo info) {
-        runOnUiThread(() -> {
-            // Check if all downloads complete
-            boolean allDone = true;
-            for (DownloadInfo di : downloadQueue) {
-                if (di.status != DownloadInfo.STATUS_COMPLETED &&
-                    di.status != DownloadInfo.STATUS_CANCELLED) {
-                    allDone = false;
-                    break;
-                }
-            }
-            
-            if (allDone) {
-                verifyAllDownloads();
-            }
-            updateProgressUI(info);
-        });
-    }
-
-    @Override
-    public void onFailed(DownloadInfo info, String error) {
-        runOnUiThread(() -> {
-            updateProgressUI(info);
-            if (info.retryCount >= 3) {
-                showSnackbar("Error: " + error + " (reintentos agotados)");
-            }
-        });
-    }
-
-    @Override
-    public void onPaused(DownloadInfo info) {
-        runOnUiThread(() -> updateProgressUI(info));
-    }
-
-    @Override
-    public void onAllCompleted() {
-        runOnUiThread(() -> verifyAllDownloads());
-    }
-
-    private void updateProgressUI(DownloadInfo info) {
-        // Update overall progress
-        long totalDownloaded = 0;
-        long totalSize = 0;
-        double totalSpeed = 0;
-        long maxEta = 0;
-        int activeCount = 0;
-        
-        for (DownloadInfo di : downloadQueue) {
-            totalDownloaded += di.downloadedBytes;
-            totalSize += di.totalBytes;
-            totalSpeed += di.getSpeedBytesPerSec();
-            if (di.getEtaMillis() > maxEta) maxEta = di.getEtaMillis();
-            if (di.status == DownloadInfo.STATUS_DOWNLOADING) activeCount++;
-        }
-        
-        if (totalSize > 0) {
-            int progress = (int) ((totalDownloaded * 100) / totalSize);
-            progressBar.setProgress(progress, true);
-        }
-        
-        progressText.setText(String.format("%.1f MB / %.1f MB (%d%%)",
-            totalDownloaded / (1024.0 * 1024),
-            totalSize / (1024.0 * 1024),
-            totalSize > 0 ? (int)((totalDownloaded * 100) / totalSize) : 0));
-        
-        speedText.setText(String.format("%.1f MB/s", totalSpeed / (1024.0 * 1024)));
-        etaText.setText(formatEta(maxEta));
-    }
-
-    private String formatEta(long millis) {
-        if (millis <= 0) return "Calculando…";
-        long seconds = millis / 1000;
-        if (seconds < 60) return seconds + "s";
-        long minutes = seconds / 60;
-        if (minutes < 60) return minutes + "m " + (seconds % 60) + "s";
-        long hours = minutes / 60;
-        return hours + "h " + (minutes % 60) + "m";
-    }
-
-    private void verifyAllDownloads() {
-        setState(ResourceState.VERIFYING);
-        executor.execute(() -> {
-            boolean allValid = true;
-            File bundleDir = FileUtils.getBundleDir(this);
-            
-            for (DownloadInfo info : downloadQueue) {
-                File file = new File(info.destinationPath);
-                if (!file.exists()) {
-                    allValid = false;
-                    break;
-                }
-                if (info.expectedSha256 != null && !info.expectedSha256.isEmpty()) {
-                    if (!CryptoUtils.verifySha256(file, info.expectedSha256)) {
-                        allValid = false;
-                        break;
-                    }
-                }
-            }
-            
-            final boolean resourcesValid = allValid;
-            runOnUiThread(() -> {
-                if (resourcesValid) {
-                    isGameReady = true;
-                    setState(ResourceState.READY);
-                    showSnackbar("¡Recursos instalados correctamente!");
-                } else {
-                    setState(ResourceState.CORRUPTED);
-                    showError("Verificación fallida",
-                        "Algunos archivos no pasaron la verificación SHA-256. Usa Reparar.");
-                }
-            });
-        });
-    }
-
-    private void showSettingsDialog() {
-        ResourceManagerApplication app = ResourceManagerApplication.getInstance();
-        ResourceManagerApplication.ResourceConfig config = app.getConfig();
-        
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_settings, null);
-        // Settings dialog would be created here - simplified for now
-        new MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.settings_title)
-            .setMessage("URL de descarga: " + config.getDownloadUrl() + "\n"
-                + "URL de manifiesto: " + config.getManifestUrl() + "\n\n"
-                + "Edita estos valores en la configuración avanzada.")
-            .setPositiveButton("OK", null)
-            .setNeutralButton("Avanzado", (d, w) -> showAdvancedSettings(config))
-            .show();
-    }
-
-    private void showAdvancedSettings(ResourceManagerApplication.ResourceConfig config) {
-        // Advanced settings implementation
-        Toast.makeText(this, "Configuración avanzada: pendiente", Toast.LENGTH_SHORT).show();
-    }
-
-    private void showAboutDialog() {
-        new MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.welcome_title)
-            .setMessage(getString(R.string.about_credits))
-            .setPositiveButton("OK", null)
-            .show();
-    }
-
-    private void showError(String title, String message) {
-        new MaterialAlertDialogBuilder(this)
-            .setTitle(title)
-            .setMessage(message)
-            .setPositiveButton("OK", null)
-            .show();
-    }
-
-    private void showSnackbar(String message) {
-        Snackbar.make(findViewById(android.R.id.content), message, Snackbar.LENGTH_LONG).show();
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        executor.shutdown();
-    }
+    private static double mib(long size) { return size / (1024.0 * 1024.0); }
 }

@@ -3,21 +3,43 @@ plugins {
     id "org.jetbrains.kotlin.android"
 }
 
+def nativeInput = layout.projectDirectory.dir(
+    providers.gradleProperty("novaNativeDir").getOrElse("../build/recovery/android"))
+def recoveryKeystore = providers.environmentVariable("NOVA_SIGNING_KEYSTORE").orNull
+
 android {
     namespace "com.novahd.recomp"
     compileSdk 34
-    ndkVersion "27.0.12077973"
+    ndkVersion "28.2.13676358"
 
     defaultConfig {
         applicationId "com.novahd.recomp"
         minSdk 26
         targetSdk 34
-        versionCode 4
-        versionName "0.4"
+        versionCode 5
+        versionName "0.5-recovery"
         
         ndk {
             abiFilters "arm64-v8a"
         }
+    }
+
+    if (recoveryKeystore) {
+        signingConfigs.debug {
+            storeFile file(recoveryKeystore)
+            storePassword System.getenv("NOVA_SIGNING_STORE_PASSWORD")
+            keyAlias System.getenv("NOVA_SIGNING_ALIAS")
+            keyPassword System.getenv("NOVA_SIGNING_KEY_PASSWORD")
+        }
+    }
+
+    sourceSets.main {
+        jniLibs.srcDir(nativeInput.dir("jni"))
+        assets.srcDir(nativeInput.dir("assets"))
+    }
+
+    androidResources {
+        noCompress += ["bin"]
     }
 
     buildTypes {
@@ -52,24 +74,33 @@ android {
     }
 }
 
+def verifyRecoveryInputs = tasks.register("verifyRecoveryInputs") {
+    doLast {
+        def lib = nativeInput.file("jni/arm64-v8a/libnovahd.so").asFile
+        def image = nativeInput.file("assets/image.bin").asFile
+        if (!lib.isFile() || lib.length() == 0 || !image.isFile() || image.length() == 0) {
+            throw new GradleException("Recovery requires ARM64 libnovahd.so and image.bin built from the original iPad Mach-O. See docs/RECOVERY-v0.5.md.")
+        }
+        if (!nativeInput.file("assets/NovaHD.app/Info.plist").asFile.isFile()) {
+            throw new GradleException("Recovery requires the verified original campaign assets. See docs/RECOVERY-v0.5.md.")
+        }
+        lib.withInputStream { stream ->
+            byte[] header = stream.readNBytes(20)
+            if (header.length != 20 || header[0] != 127 || header[1] != 69 || header[2] != 76
+                    || header[3] != 70 || header[4] != 2 || header[5] != 1
+                    || header[18] != (byte) 183 || header[19] != 0) {
+                throw new GradleException("The recovery library must be a little-endian AArch64 ELF64.")
+            }
+        }
+    }
+}
+
+tasks.configureEach { task ->
+    if (task.name in ["packageDebug", "packageRelease"]) task.dependsOn(verifyRecoveryInputs)
+}
+
 dependencies {
-    implementation "androidx.core:core-ktx:1.12.0"
     implementation "androidx.appcompat:appcompat:1.6.1"
     implementation "com.google.android.material:material:1.11.0"
     implementation "androidx.constraintlayout:constraintlayout:2.1.4"
-    implementation "androidx.activity:activity-ktx:1.8.2"
-    
-    // Networking
-    implementation "com.squareup.okhttp3:okhttp:4.12.0"
-    implementation "com.squareup.okio:okio:3.5.0"
-    
-    // JSON
-    implementation "com.google.code.gson:gson:2.10.1"
-    
-    // Coroutines
-    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
-    
-    // Lifecycle
-    implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.7.0"
-    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0"
 }
