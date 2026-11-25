@@ -34,7 +34,6 @@ jobs:
     name: Build Native Library (ARM64)
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # Only run if exe input is provided
     if: github.event.inputs.exe != '' && github.event.inputs.exe != null
     
     steps:
@@ -169,7 +168,6 @@ jobs:
     name: Build Android App (ResourceManager)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # Run in parallel with native builds (no needs:), download artifacts if available
     
     steps:
       - name: Checkout repository
@@ -188,13 +186,27 @@ jobs:
         with:
           ndk-version: ${{ env.NDK_VERSION }}
           api-level: ${{ env.API_LEVEL }}
-          platform-tools: true
-          build-tools: "34.0.0"
       
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
+      
+      - name: Generate debug keystore
+        run: |
+          cd ${{ github.workspace }}/app
+          if [ ! -f debug.keystore ]; then
+            keytool -genkeypair \
+              -keystore debug.keystore \
+              -storepass android \
+              -keypass android \
+              -alias novahd \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=novahd-recomp debug"
+            echo "Generated debug.keystore"
+          fi
       
       - name: Download native library (Linux)
         uses: actions/download-artifact@v4
@@ -229,7 +241,7 @@ jobs:
       - name: Build Android App (Gradle)
         run: |
           cd ${{ github.workspace }}
-          ./gradlew assembleRelease --no-daemon -x lint
+          ./gradlew :app:assembleRelease --no-daemon -x lint
       
       - name: Verify APK
         if: always()
