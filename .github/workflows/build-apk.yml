@@ -15,6 +15,10 @@ on:
         description: "Path to NovaHD.app folder to include in APK (optional)"
         type: string
         required: false
+      exe:
+        description: "Path to NovaHD executable (Mach-O) for recompilation"
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -75,32 +79,26 @@ jobs:
             ${{ env.CACHE_PREFIX }}-build-${{ runner.os }}-
       
       - name: Build native library (recompilation)
-        if: github.event.inputs.checked != "true"
+        if: github.event.inputs.checked != 'true'
         run: |
           cd ${{ github.workspace }}
           python3 tools/recomp/build_apk.py \
-            --exe ${{ env.EXE_PATH }} \
+            --exe ${{ github.event.inputs.exe }} \
             --out build/apk \
-            --bundle ${{ env.BUNDLE_PATH }} \
+            --bundle ${{ github.event.inputs.bundle }} \
             --runtime-only
-        env:
-          EXE_PATH: ${{ github.event.inputs.exe || "" }}
-          BUNDLE_PATH: ${{ github.event.inputs.bundle || "" }}
         continue-on-error: true
       
       - name: Build native library (checked)
-        if: github.event.inputs.checked == "true"
+        if: github.event.inputs.checked == 'true'
         run: |
           cd ${{ github.workspace }}
           python3 tools/recomp/build_apk.py \
-            --exe ${{ env.EXE_PATH }} \
+            --exe ${{ github.event.inputs.exe }} \
             --out build/apk \
-            --bundle ${{ env.BUNDLE_PATH }} \
+            --bundle ${{ github.event.inputs.bundle }} \
             --checked \
             --runtime-only
-        env:
-          EXE_PATH: ${{ github.event.inputs.exe || "" }}
-          BUNDLE_PATH: ${{ github.event.inputs.bundle || "" }}
         continue-on-error: true
       
       - name: Copy native library to app module
@@ -134,14 +132,14 @@ jobs:
       
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
-        if: always() && steps.verify.outputs.APK_PATH != ""
+        if: always() && steps.verify.outputs.APK_PATH != ''
         with:
           name: novahd-recomp-apk-${{ github.sha }}
           path: ${{ steps.verify.outputs.APK_PATH }}
           retention-days: 30
       
       - name: Create Release (on tag push)
-        if: startsWith(github.ref, "refs/tags/v")
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v1
         with:
           files: ${{ steps.verify.outputs.APK_PATH }}
@@ -198,32 +196,26 @@ jobs:
             ${{ env.CACHE_PREFIX }}-build-windows-${{ runner.os }}-
       
       - name: Build native library (recompilation)
-        if: github.event.inputs.checked != "true"
+        if: github.event.inputs.checked != 'true'
         run: |
           cd ${{ github.workspace }}
           python tools/recomp/build_apk.py `
-            --exe ${{ env.EXE_PATH }} `
+            --exe ${{ github.event.inputs.exe }} `
             --out build/apk `
-            --bundle ${{ env.BUNDLE_PATH }} `
+            --bundle ${{ github.event.inputs.bundle }} `
             --runtime-only
-        env:
-          EXE_PATH: ${{ github.event.inputs.exe || "" }}
-          BUNDLE_PATH: ${{ github.event.inputs.bundle || "" }}
         continue-on-error: true
       
       - name: Build native library (checked)
-        if: github.event.inputs.checked == "true"
+        if: github.event.inputs.checked == 'true'
         run: |
           cd ${{ github.workspace }}
           python tools/recomp/build_apk.py `
-            --exe ${{ env.EXE_PATH }} `
+            --exe ${{ github.event.inputs.exe }} `
             --out build/apk `
-            --bundle ${{ env.BUNDLE_PATH }} `
+            --bundle ${{ github.event.inputs.bundle }} `
             --checked `
             --runtime-only
-        env:
-          EXE_PATH: ${{ github.event.inputs.exe || "" }}
-          BUNDLE_PATH: ${{ github.event.inputs.bundle || "" }}
         continue-on-error: true
       
       - name: Copy native library to app module
@@ -261,14 +253,14 @@ jobs:
       
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
-        if: always() && steps.verify.outputs.APK_PATH != ""
+        if: always() && steps.verify.outputs.APK_PATH != ''
         with:
           name: novahd-recomp-apk-windows-${{ github.sha }}
           path: ${{ steps.verify.outputs.APK_PATH }}
           retention-days: 30
       
       - name: Create Release (on tag push)
-        if: startsWith(github.ref, "refs/tags/v")
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v1
         with:
           files: ${{ steps.verify.outputs.APK_PATH }}
