@@ -103,8 +103,8 @@ public class ResourceManagerActivity extends AppCompatActivity
         }
 
         setContentView(R.layout.activity_resource_manager);
-        initViews();
         initAnimations();
+        initViews();
         checkPermissions();
         loadManifest();
         startResourceCheck();
@@ -234,8 +234,6 @@ public class ResourceManagerActivity extends AppCompatActivity
             return;
         }
 
-        boolean allPresent = true;
-        boolean anyCorrupted = false;
         List<ResourceManifest.ResourceFile> missingFiles = new ArrayList<>();
         List<ResourceManifest.ResourceFile> corruptedFiles = new ArrayList<>();
 
@@ -243,22 +241,19 @@ public class ResourceManagerActivity extends AppCompatActivity
             if (!rf.required) continue;
             File targetFile = new File(bundleDir, rf.path);
             if (!targetFile.exists()) {
-                allPresent = false;
                 missingFiles.add(rf);
             } else if (rf.sha256 != null && !rf.sha256.isEmpty()) {
                 if (!CryptoUtils.verifySha256(targetFile, rf.sha256)) {
-                    allPresent = false;
-                    anyCorrupted = true;
                     corruptedFiles.add(rf);
                 }
             }
         }
 
         runOnUiThread(() -> {
-            if (allPresent) {
+            if (missingFiles.isEmpty() && corruptedFiles.isEmpty()) {
                 isGameReady = true;
                 setState(ResourceState.READY);
-            } else if (anyCorrupted) {
+            } else if (!corruptedFiles.isEmpty()) {
                 setState(ResourceState.CORRUPTED);
                 prepareDownloadQueue(corruptedFiles);
             } else {
@@ -286,7 +281,7 @@ public class ResourceManagerActivity extends AppCompatActivity
                 runOnUiThread(() -> {
                     setState(ResourceState.ERROR);
                     showError("Error de red", "No se pudo obtener el manifiesto: " + error 
-                        + "\nComprueba tu conexión o importa una copia local.");
+                        + "\nComprueba tu conexiÃ³n o importa una copia local.");
                 });
             }
         });
@@ -452,8 +447,8 @@ public class ResourceManagerActivity extends AppCompatActivity
     private void onCancelAll() {
         new MaterialAlertDialogBuilder(this)
             .setTitle("Cancelar descargas")
-            .setMessage("¿Cancelar todas las descargas en progreso?")
-            .setPositiveButton("Sí, cancelar", (d, w) -> {
+            .setMessage("Â¿Cancelar todas las descargas en progreso?")
+            .setPositiveButton("SÃ­, cancelar", (d, w) -> {
                 if (downloadService != null) {
                     for (DownloadInfo info : downloadQueue) {
                         downloadService.cancelDownload(info.fileId);
@@ -480,7 +475,7 @@ public class ResourceManagerActivity extends AppCompatActivity
             runOnUiThread(() -> {
                 if (isGameReady) {
                     setState(ResourceState.READY);
-                    showSnackbar("Reparación completada");
+                    showSnackbar("ReparaciÃ³n completada");
                 } else {
                     setState(ResourceState.CORRUPTED);
                 }
@@ -515,7 +510,7 @@ public class ResourceManagerActivity extends AppCompatActivity
         
         // Check network
         if (!NetworkUtils.isNetworkAvailable(this)) {
-            showError("Sin conexión", getString(R.string.error_network));
+            showError("Sin conexiÃ³n", getString(R.string.error_network));
             return;
         }
         
@@ -546,6 +541,14 @@ public class ResourceManagerActivity extends AppCompatActivity
     }
 
     private void launchGame() {
+        File library = new File(getApplicationInfo().nativeLibraryDir, "libnovahd.so");
+        try (InputStream image = getAssets().open("image.bin")) {
+            if (!library.isFile()) throw new IOException("libnovahd.so");
+        } catch (IOException missingRuntime) {
+            showError(getString(R.string.game_runtime_missing_title),
+                getString(R.string.game_runtime_missing_message));
+            return;
+        }
         Intent intent = new Intent(this, GameActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
@@ -587,16 +590,7 @@ public class ResourceManagerActivity extends AppCompatActivity
     }
 
     private void importBundle(Uri treeUri) throws IOException {
-        // Find NovaHD.app in the selected directory
-        // This uses DocumentsContract to traverse the tree
-        File bundleDir = FileUtils.getBundleDir(this);
-        FileUtils.deleteRecursive(bundleDir);
-        bundleDir.mkdirs();
-        
-        // For simplicity, we assume the user selected the NovaHD.app folder directly
-        // or a folder containing it. A full implementation would traverse the tree.
-        // This is a placeholder - real implementation needs DocumentsContract APIs
-        throw new UnsupportedOperationException("SAF import requires DocumentsContract traversal");
+        throw new IOException(getString(R.string.import_not_available));
     }
 
     // DownloadService.DownloadCallback implementation
@@ -676,7 +670,7 @@ public class ResourceManagerActivity extends AppCompatActivity
     }
 
     private String formatEta(long millis) {
-        if (millis <= 0) return "Calculando…";
+        if (millis <= 0) return "Calculandoâ€¦";
         long seconds = millis / 1000;
         if (seconds < 60) return seconds + "s";
         long minutes = seconds / 60;
@@ -705,15 +699,16 @@ public class ResourceManagerActivity extends AppCompatActivity
                 }
             }
             
+            final boolean resourcesValid = allValid;
             runOnUiThread(() -> {
-                if (allValid) {
+                if (resourcesValid) {
                     isGameReady = true;
                     setState(ResourceState.READY);
-                    showSnackbar("¡Recursos instalados correctamente!");
+                    showSnackbar("Â¡Recursos instalados correctamente!");
                 } else {
                     setState(ResourceState.CORRUPTED);
-                    showError("Verificación fallida", 
-                        "Algunos archivos no pasaron la verificación SHA-256. Usa Reparar.");
+                    showError("VerificaciÃ³n fallida",
+                        "Algunos archivos no pasaron la verificaciÃ³n SHA-256. Usa Reparar.");
                 }
             });
         });
@@ -729,7 +724,7 @@ public class ResourceManagerActivity extends AppCompatActivity
             .setTitle(R.string.settings_title)
             .setMessage("URL de descarga: " + config.getDownloadUrl() + "\n"
                 + "URL de manifiesto: " + config.getManifestUrl() + "\n\n"
-                + "Edita estos valores en la configuración avanzada.")
+                + "Edita estos valores en la configuraciÃ³n avanzada.")
             .setPositiveButton("OK", null)
             .setNeutralButton("Avanzado", (d, w) -> showAdvancedSettings(config))
             .show();
@@ -737,7 +732,7 @@ public class ResourceManagerActivity extends AppCompatActivity
 
     private void showAdvancedSettings(ResourceManagerApplication.ResourceConfig config) {
         // Advanced settings implementation
-        Toast.makeText(this, "Configuración avanzada: pendiente", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "ConfiguraciÃ³n avanzada: pendiente", Toast.LENGTH_SHORT).show();
     }
 
     private void showAboutDialog() {

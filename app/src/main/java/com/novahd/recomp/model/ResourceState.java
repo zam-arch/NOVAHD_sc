@@ -2,16 +2,16 @@ package com.novahd.recomp.model;
 
 public enum ResourceState {
     UNKNOWN("Desconocido"),
-    CHECKING("Verificando…"),
+    CHECKING("Verificandoâ€¦"),
     READY("Listo para jugar"),
     MISSING("Faltan recursos"),
-    CORRUPTED("Recursos dañados"),
-    DOWNLOADING("Descargando…"),
+    CORRUPTED("Recursos daÃ±ados"),
+    DOWNLOADING("Descargandoâ€¦"),
     PAUSED("Pausado"),
-    VERIFYING("Verificando integridad…"),
-    EXTRACTING("Extrayendo…"),
-    REPAIRING("Reparando…"),
-    IMPORTING("Importando…"),
+    VERIFYING("Verificando integridadâ€¦"),
+    EXTRACTING("Extrayendoâ€¦"),
+    REPAIRING("Reparandoâ€¦"),
+    IMPORTING("Importandoâ€¦"),
     ERROR("Error");
 
     private final String displayName;

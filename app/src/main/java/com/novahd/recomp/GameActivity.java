@@ -22,7 +22,7 @@ public class GameActivity extends NativeActivity {
     }
 
     @Override
-    public void onConfigurationChanged(@NonNull Configuration newConfig) {
+    public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         // Handle orientation changes without restarting
     }

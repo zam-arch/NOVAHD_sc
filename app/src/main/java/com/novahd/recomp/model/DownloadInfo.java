@@ -4,13 +4,20 @@ import android.os.Parcel;
 import android.os.Parcelable;
 
 public class DownloadInfo implements Parcelable {
+    public static final int STATUS_PENDING = 0;
+    public static final int STATUS_DOWNLOADING = 1;
+    public static final int STATUS_PAUSED = 2;
+    public static final int STATUS_COMPLETED = 3;
+    public static final int STATUS_FAILED = 4;
+    public static final int STATUS_CANCELLED = 5;
+
     public String fileId;
     public String url;
     public String destinationPath;
     public long totalBytes;
     public long downloadedBytes;
     public String expectedSha256;
-    public int status; // 0=pending, 1=downloading, 2=paused, 3=completed, 4=failed, 5=cancelled
+    public int status = STATUS_PENDING;
     public String errorMessage;
     public long startTime;
     public long lastUpdateTime;
@@ -94,7 +101,7 @@ public class DownloadInfo implements Parcelable {
 
     public String getFormattedEta() {
         long eta = getEtaMillis();
-        if (eta < 0) return "Calculando…";
+        if (eta < 0) return "Calculandoâ€¦";
         long seconds = eta / 1000;
         if (seconds < 60) return seconds + "s";
         long minutes = seconds / 60;
