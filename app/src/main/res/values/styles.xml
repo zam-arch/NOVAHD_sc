@@ -25,7 +25,7 @@
     </style>
 
     <!-- Progress bar style -->
-    <style name="Widget.NOVAHD.ProgressBar" parent="Widget.MaterialComponents.ProgressIndicator.Linear">
+    <style name="Widget.NOVAHD.ProgressBar" parent="Widget.MaterialComponents.LinearProgressIndicator">
         <item name="trackThickness">8dp</item>
         <item name="indicatorSize">8dp</item>
         <item name="indicatorColor">@color/nova_accent</item>
@@ -56,7 +56,7 @@
 
     <!-- Text styles -->
     <style name="TextAppearance.NOVAHD.Title" parent="TextAppearance.MaterialComponents.Headline4">
-        <item name="android:textColor">@color/nova_on_background</item>
+        <item name="android:textColor">@color/nova_on_surface</item>
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:letterSpacing">0.04</item>
     </style>

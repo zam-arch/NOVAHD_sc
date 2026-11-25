@@ -2,298 +2,49 @@ name: Build N.O.V.A. HD APK (ARM64)
 
 on:
   push:
-    branches: [development]
+    branches: [development, feature/android-build-verification]
   pull_request:
     branches: [development]
   workflow_dispatch:
-    inputs:
-      checked:
-        description: "Build with RECOMP_CHECKED (bounds checks, call chain in crashes)"
-        type: boolean
-        default: false
-      bundle:
-        description: "Path to NovaHD.app folder to include in APK (optional)"
-        type: string
-        required: false
-      exe:
-        description: "Path to NovaHD executable (Mach-O) for native library recompilation"
-        type: string
-        required: false
 
 permissions:
   contents: read
 
 env:
-  CACHE_PREFIX: novahd
-  NDK_VERSION: "27.0.12077973"
-  API_LEVEL: "26"
   GRADLE_VERSION: "8.5"
 
 jobs:
-  build-native:
-    name: Build Native Library (ARM64)
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    if: github.event.inputs.exe != '' && github.event.inputs.exe != null
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: "latest"
-          accept-android-sdk-licenses: "true"
-          packages: "platforms;android-26 ndk;27.0.12077973 build-tools;34.0.0"
-      
-      - name: Install Python dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install capstone unicorn ziglang
-      
-      - name: Cache build artifacts
-        uses: actions/cache@v4
-        id: cache-build
-        with:
-          path: |
-            build/recomp-android
-            build/recomp-android-checked
-          key: ${{ env.CACHE_PREFIX }}-native-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            ${{ env.CACHE_PREFIX }}-native-${{ runner.os }}-
-      
-      - name: Build native library (recompilation)
-        if: github.event.inputs.checked != 'true'
-        run: |
-          cd ${{ github.workspace }}
-          python3 tools/recomp/build_apk.py \
-            --exe ${{ github.event.inputs.exe }} \
-            --out build/apk \
-            --bundle ${{ github.event.inputs.bundle }} \
-            --runtime-only
-        continue-on-error: true
-      
-      - name: Build native library (checked)
-        if: github.event.inputs.checked == 'true'
-        run: |
-          cd ${{ github.workspace }}
-          python3 tools/recomp/build_apk.py \
-            --exe ${{ github.event.inputs.exe }} \
-            --out build/apk \
-            --bundle ${{ github.event.inputs.bundle }} \
-            --checked \
-            --runtime-only
-        continue-on-error: true
-      
-      - name: Upload native library
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: libnovahd-so-${{ github.sha }}
-          path: build/apk/libnovahd.so
-          retention-days: 30
-
-  build-native-windows:
-    name: Build Native Library (ARM64) - Windows
-    runs-on: windows-latest
-    timeout-minutes: 120
-    if: github.event.inputs.exe != '' && github.event.inputs.exe != null
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: "latest"
-          accept-android-sdk-licenses: "true"
-          packages: "platforms;android-26 ndk;27.0.12077973 build-tools;34.0.0"
-      
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install capstone unicorn ziglang
-      
-      - name: Cache build artifacts
-        uses: actions/cache@v4
-        id: cache-build
-        with:
-          path: |
-            build/recomp-android
-            build/recomp-android-checked
-          key: ${{ env.CACHE_PREFIX }}-native-windows-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            ${{ env.CACHE_PREFIX }}-native-windows-${{ runner.os }}-
-      
-      - name: Build native library (recompilation)
-        if: github.event.inputs.checked != 'true'
-        run: |
-          cd ${{ github.workspace }}
-          python tools/recomp/build_apk.py `
-            --exe ${{ github.event.inputs.exe }} `
-            --out build/apk `
-            --bundle ${{ github.event.inputs.bundle }} `
-            --runtime-only
-        continue-on-error: true
-      
-      - name: Build native library (checked)
-        if: github.event.inputs.checked == 'true'
-        run: |
-          cd ${{ github.workspace }}
-          python tools/recomp/build_apk.py `
-            --exe ${{ github.event.inputs.exe }} `
-            --out build/apk `
-            --bundle ${{ github.event.inputs.bundle }} `
-            --checked `
-            --runtime-only
-        continue-on-error: true
-      
-      - name: Upload native library
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: libnovahd-so-windows-${{ github.sha }}
-          path: build/apk/libnovahd.so
-          retention-days: 30
-
   build-app:
     name: Build Android App (ResourceManager)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    
+    timeout-minutes: 30
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
         with:
-          fetch-depth: 0
-      
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: "temurin"
+          distribution: temurin
           java-version: "17"
-      
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+
+      - uses: android-actions/setup-android@v3
         with:
-          cmdline-tools-version: "latest"
-          accept-android-sdk-licenses: "true"
-          packages: "platforms;android-26 build-tools;34.0.0"
-      
-      - name: Setup Gradle (v4)
-        uses: gradle/actions/setup-gradle@v4
+          packages: "platforms;android-34 build-tools;34.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
-      
-      - name: Generate debug keystore
+
+      - name: Assemble debug and release
+        run: gradle :app:assembleDebug :app:assembleRelease --no-daemon
+
+      - name: Verify APK signature
         run: |
-          cd ${{ github.workspace }}/app
-          if [ ! -f debug.keystore ]; then
-            keytool -genkeypair \
-              -keystore debug.keystore \
-              -storepass android \
-              -keypass android \
-              -alias novahd \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=novahd-recomp debug"
-            echo "Generated debug.keystore"
-          fi
-      
-      - name: Download native library (Linux)
-        uses: actions/download-artifact@v4
-        id: download-native-linux
-        continue-on-error: true
-        if: github.event.inputs.exe != ''
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify app/build/outputs/apk/debug/app-debug.apk
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: libnovahd-so-${{ github.sha }}
-          path: build/apk
-      
-      - name: Download native library (Windows)
-        uses: actions/download-artifact@v4
-        id: download-native-windows
-        continue-on-error: true
-        if: github.event.inputs.exe != ''
-        with:
-          name: libnovahd-so-windows-${{ github.sha }}
-          path: build/apk
-      
-      - name: Copy native library to app module
-        run: |
-          mkdir -p app/src/main/jniLibs/arm64-v8a
-          if [ -f build/apk/libnovahd.so ]; then
-            cp build/apk/libnovahd.so app/src/main/jniLibs/arm64-v8a/
-            echo "Copied libnovahd.so from build/apk"
-          elif [ -f build/apk/libnovahd.so ]; then
-            cp build/apk/libnovahd.so app/src/main/jniLibs/arm64-v8a/
-            echo "Copied libnovahd.so from build/apk (windows)"
-          else
-            echo "WARNING: libnovahd.so not found - APK will be built without native library"
-            echo "The ResourceManager will work but GameActivity will require libnovahd.so at runtime"
-          fi
-      
-      - name: Build Android App (Gradle)
-        run: |
-          cd ${{ github.workspace }}
-          ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon -x lint --info
-      
-      - name: Find APK
-        if: always()
-        run: |
-          echo "Searching for APK files..."
-          find . -name "*.apk" -type f 2>/dev/null | head -20
-          echo "---"
-          ls -la app/build/outputs/apk/ 2>/dev/null || echo "app/build/outputs/apk not found"
-          ls -la app/build/outputs/ 2>/dev/null || echo "app/build/outputs not found"
-        id: find-apk
-      
-      - name: Verify APK
-        if: always()
-        run: |
-          # Try release first, then debug
-          APK_PATH=""
-          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
-            APK_PATH="app/build/outputs/apk/release/app-release.apk"
-          elif [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
-            APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
-          else
-            # Fallback: find any APK
-            FOUND=$(find app/build/outputs -name "*.apk" -type f 2>/dev/null | head -1)
-            if [ -n "$FOUND" ]; then
-              APK_PATH="$FOUND"
-            fi
-          fi
-          
-          if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
-            echo "APK built successfully: $APK_PATH"
-            echo "APK_SIZE=$(stat -c%s "$APK_PATH")" >> $GITHUB_OUTPUT
-            echo "APK_PATH=$APK_PATH" >> $GITHUB_OUTPUT
-          else
-            echo "APK not found in any output directory"
-            exit 1
-          fi
-        id: verify
-      
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        if: always() && steps.verify.outputs.APK_PATH != ''
-        with:
-          name: novahd-recomp-apk-${{ github.sha }}
-          path: ${{ steps.verify.outputs.APK_PATH }}
-          retention-days: 30
-      
-      - name: Create Release (on tag push)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: ${{ steps.verify.outputs.APK_PATH }}
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: novahd-resource-manager-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

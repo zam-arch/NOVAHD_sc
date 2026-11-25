@@ -7,6 +7,7 @@
 # (2) You need to have a JDK installed and JAVA_HOME set.
 # (3) This script uses the Gradle Wrapper to download Gradle if needed.
 
+APP_HOME=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P) || exit 1
 APP_NAME="Gradle"
 APP_BASE_NAME=$(basename "$0")
 

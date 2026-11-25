@@ -5,3 +5,6 @@ build/
 *.i64
 __pycache__/
 /NovaHD
+
+.gradle/
+gradle-tmp/
