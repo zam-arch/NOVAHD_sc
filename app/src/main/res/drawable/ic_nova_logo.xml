@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <!-- Outer glow ring -->
+    <path
+        android:pathData="M60,10 A50,50 0 1,1 59.9,10"
+        android:strokeWidth="3"
+        android:strokeColor="@color/nova_accent"
+        android:fillColor="@android:color/transparent"
+        android:strokeLineCap="round" />
+    <!-- Inner hexagon -->
+    <path
+        android:pathData="M60,20 L100,35 L100,65 L60,80 L20,65 L20,35 Z"
+        android:strokeWidth="2.5"
+        android:strokeColor="@color/nova_accent"
+        android:fillColor="@color/nova_glow_weak" />
+    <!-- Center diamond -->
+    <path
+        android:pathData="M60,38 L82,58 L60,78 L38,58 Z"
+        android:fillColor="@color/nova_accent" />
+    <!-- NOVA text -->
+    <path
+        android:pathData="M60,100"
+        android:fillColor="@color/nova_on_surface" />
+</vector>

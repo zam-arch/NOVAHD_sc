@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/nova_background"
+    tools:context=".ResourceManagerActivity">
+
+    <!-- Animated background with scanlines -->
+    <View
+        android:id="@+id/scanlineOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/scanline_pattern"
+        android:alpha="0.15" />
+
+    <!-- Particle effect container -->
+    <FrameLayout
+        android:id="@+id/particleContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Main content -->
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:clipToPadding="false"
+        android:padding="24dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:paddingTop="48dp"
+            android:paddingBottom="48dp">
+
+            <!-- Logo/Title Section -->
+            <LinearLayout
+                android:id="@+id/headerSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center_horizontal"
+                android:layout_marginBottom="48dp">
+
+                <ImageView
+                    android:id="@+id/logoImage"
+                    android:layout_width="120dp"
+                    android:layout_height="120dp"
+                    android:src="@drawable/ic_nova_logo"
+                    android:contentDescription="@string/welcome_title"
+                    android:alpha="0.9" />
+
+                <TextView
+                    android:id="@+id/titleText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/welcome_title"
+                    style="@style/TextAppearance.NOVAHD.Title"
+                    android:layout_marginTop="16dp" />
+
+                <TextView
+                    android:id="@+id/subtitleText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/welcome_subtitle"
+                    style="@style/TextAppearance.NOVAHD.Subtitle"
+                    android:layout_marginTop="4dp" />
+
+                <View
+                    android:layout_width="80dp"
+                    android:layout_height="2dp"
+                    android:background="@color/nova_accent"
+                    android:layout_marginTop="16dp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/versionText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/about_version"
+                    style="@style/TextAppearance.NOVAHD.Status" />
+            </LinearLayout>
+
+            <!-- Status Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/statusCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="8dp"
+                android:layout_marginBottom="24dp"
+                app:cardBackgroundColor="@color/nova_surface"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="8dp"
+                app:strokeColor="@color/nova_divider"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="24dp"
+                    android:gravity="center_horizontal">
+
+                    <TextView
+                        android:id="@+id/statusTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/checking_resources"
+                        style="@style/TextAppearance.NOVAHD.Body"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
+
+                    <TextView
+                        android:id="@+id/statusDetail"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text=""
+                        style="@style/TextAppearance.NOVAHD.Mono"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center"
+                        android:visibility="gone" />
+
+                    <!-- Progress Bar Container -->
+                    <LinearLayout
+                        android:id="@+id/progressContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginTop="16dp"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <TextView
+                                android:id="@+id/progressText"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="0.0 MB / 0.0 MB (0%)"
+                                style="@style/TextAppearance.NOVAHD.Mono"
+                                android:gravity="start" />
+
+                            <TextView
+                                android:id="@+id/speedText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0.0 MB/s"
+                                style="@style/TextAppearance.NOVAHD.Mono"
+                                android:layout_marginStart="16dp"
+                                android:gravity="end" />
+                        </LinearLayout>
+
+                        <com.google.android.material.progressindicator.LinearProgressIndicator
+                            android:id="@+id/progressBar"
+                            android:layout_width="match_parent"
+                            android:layout_height="8dp"
+                            android:layout_marginTop="8dp"
+                            style="@style/Widget.NOVAHD.ProgressBar"
+                            android:progress="0" />
+
+                        <TextView
+                            android:id="@+id/etaText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Calculando…"
+                            style="@style/TextAppearance.NOVAHD.Status"
+                            android:layout_marginTop="4dp"
+                            android:gravity="center" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Action Buttons -->
+            <LinearLayout
+                android:id="@+id/buttonContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginHorizontal="8dp"
+                android:gravity="center_horizontal">
+
+                <!-- Primary action (Download/Play/Import) -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/primaryButton"
+                    android:layout_width="280dp"
+                    android:layout_height="56dp"
+                    android:text="@string/btn_download"
+                    style="@style/Widget.NOVAHD.Button.Primary"
+                    android:visibility="gone" />
+
+                <!-- Secondary actions row -->
+                <LinearLayout
+                    android:id="@+id/secondaryButtons"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center"
+                    android:visibility="gone">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/pauseButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:text="@string/btn_pause"
+                        style="@style/Widget.NOVAHD.Button.Secondary"
+                        android:layout_marginEnd="8dp"
+                        android:visibility="gone" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/cancelButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:text="@string/btn_cancel"
+                        style="@style/Widget.NOVAHD.Button.Secondary"
+                        android:layout_marginStart="8dp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- Alternative actions (Import/Repair/Settings) -->
+                <LinearLayout
+                    android:id="@+id/alternativeButtons"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="16dp"
+                    android:visibility="gone">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/importButton"
+                        android:layout_width="280dp"
+                        android:layout_height="48dp"
+                        android:text="@string/btn_import"
+                        style="@style/Widget.NOVAHD.Button.Secondary"
+                        android:layout_gravity="center_horizontal" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/repairButton"
+                        android:layout_width="280dp"
+                        android:layout_height="48dp"
+                        android:text="@string/btn_repair"
+                        style="@style/Widget.NOVAHD.Button.Ghost"
+                        android:layout_marginTop="8dp"
+                        android:layout_gravity="center_horizontal" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settingsButton"
+                        android:layout_width="280dp"
+                        android:layout_height="48dp"
+                        android:text="@string/btn_settings"
+                        style="@style/Widget.NOVAHD.Button.Ghost"
+                        android:layout_marginTop="8dp"
+                        android:layout_gravity="center_horizontal" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Offline indicator -->
+            <TextView
+                android:id="@+id/offlineIndicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/offline_mode"
+                style="@style/TextAppearance.NOVAHD.Status"
+                android:layout_marginTop="24dp"
+                android:drawableStart="@drawable/ic_check_circle"
+                android:drawablePadding="8dp"
+                android:visibility="gone" />
+
+            <!-- Credits -->
+            <TextView
+                android:id="@+id/creditsText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/about_credits"
+                style="@style/TextAppearance.NOVAHD.Status"
+                android:layout_marginTop="32dp"
+                android:gravity="center"
+                android:lineSpacingExtra="4dp" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Settings Dialog will be created programmatically -->
+</androidx.constraintlayout.widget.ConstraintLayout>

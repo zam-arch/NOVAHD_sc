@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- NOVA HD Color Palette - Futuristic sci-fi aesthetic -->
+    <color name="nova_primary">#FF0A1628</color>        <!-- Deep space navy -->
+    <color name="nova_primary_dark">#FF050A14</color>   <!-- Darker navy -->
+    <color name="nova_on_primary">#FFE8F4FF</color>     <!-- Ice white -->
+    
+    <color name="nova_accent">#FF00D4FF</color>         <!-- Electric cyan -->
+    <color name="nova_accent_dark">#FF0099CC</color>    <!-- Darker cyan -->
+    <color name="nova_on_accent">#FF0A1628</color>      <!-- Navy on cyan -->
+    
+    <color name="nova_background">#FF050A14</color>     <!-- Near black -->
+    <color name="nova_surface">#FF0D1B2E</color>        <!-- Dark surface -->
+    <color name="nova_on_surface">#FFE8F4FF</color>     <!-- Ice white -->
+    <color name="nova_on_surface_variant">#FF88AACC</color>  <!-- Muted cyan -->
+    
+    <color name="nova_progress_track">#FF1A2A4A</color> <!-- Progress track -->
+    <color name="nova_progress_fill">#FF00D4FF</color>  <!-- Progress fill -->
+    
+    <color name="nova_success">#FF00FF88</color>        <!-- Neon green -->
+    <color name="nova_warning">#FFFFAA00</color>        <!-- Amber -->
+    <color name="nova_error">#FFFF3366</color>         <!-- Coral red -->
+    <color name="nova_divider">#FF1A2A4A</color>        <!-- Subtle divider -->
+    
+    <!-- Gradient colors for background -->
+    <color name="nova_gradient_start">#FF0A1628</color>
+    <color name="nova_gradient_mid">#FF0D1B2E</color>
+    <color name="nova_gradient_end">#FF050A14</color>
+    
+    <!-- Scanline overlay -->
+    <color name="nova_scanline">#1A00D4FF</color>
+    
+    <!-- Particle/glow effects -->
+    <color name="nova_glow_strong">#4000D4FF</color>
+    <color name="nova_glow_weak">#1500D4FF</color>
+</resources>

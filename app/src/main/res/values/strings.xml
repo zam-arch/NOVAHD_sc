@@ -1,0 +1,45 @@
+<resources>
+    <string name="app_name">N.O.V.A. HD</string>
+    <string name="resource_manager_title">GESTOR DE RECURSOS</string>
+    <string name="welcome_title">N.O.V.A. HD</string>
+    <string name="welcome_subtitle">Near Orbit Vanguard Alliance</string>
+    <string name="checking_resources">Verificando recursos instalados…</string>
+    <string name="resources_ready">Recursos listos</string>
+    <string name="resources_missing">Faltan recursos</string>
+    <string name="resources_corrupted">Recursos dañados</string>
+    <string name="download_title">Descargando recursos</string>
+    <string name="download_paused">Descarga pausada</string>
+    <string name="download_cancelled">Descarga cancelada</string>
+    <string name="verifying">Verificando integridad…</string>
+    <string name="extracting">Extrayendo archivos…</string>
+    <string name="ready_to_play">¡Listo para jugar!</string>
+    <string name="tap_to_start">Toca para comenzar</string>
+    <string name="btn_download">DESCARGAR</string>
+    <string name="btn_pause">PAUSAR</string>
+    <string name "btn_resume">REANUDAR</string>
+    <string name="btn_cancel">CANCELAR</string>
+    <string name="btn_retry">REINTENTAR</string>
+    <string name="btn_import">IMPORTAR COPIA</string>
+    <string name="btn_repair">REPARAR</string>
+    <string name="btn_play">JUGAR</string>
+    <string name="btn_settings">CONFIGURACIÓN</string>
+    <string name="progress_format">%1$.1f MB / %2$.1f MB (%3$d%%)</string>
+    <string name="speed_format">%1$.1f MB/s</string>
+    <string name="eta_format">Tiempo restante: %s</string>
+    <string name="error_network">Error de red. Comprueba tu conexión.</string>
+    <string name="error_space">Espacio insuficiente. Se requieren %1$.1f GB libres.</string>
+    <string name="error_checksum">Error de verificación SHA-256. El archivo está corrupto.</string>
+    <string name="error_extract">Error al extraer archivos.</string>
+    <string name="error_permission">Permiso denegado.</string>
+    <string name="settings_title">Configuración</string>
+    <string name="settings_download_url">URL de descarga</string>
+    <string name="settings_manifest_url">URL del manifiesto</string>
+    <string name="settings_auto_repair">Reparar automáticamente</string>
+    <string name="settings_notifications">Notificaciones</string>
+    <string name="about_version">Versión 0.4</string>
+    <string name="about_credits">Basado en NOVA3_sc\nGameloft N.O.V.A. HD (iOS 1.0.6)\nRecompilación estática ARM64</string>
+    <string name="import_prompt">Selecciona la carpeta NovaHD.app de tu copia legítima</string>
+    <string name="import_success">Recursos importados correctamente</string>
+    <string name="repair_complete">Reparación completada</string>
+    <string name="offline_mode">Modo offline: recursos disponibles</string>
+</resources>
