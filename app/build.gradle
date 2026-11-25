@@ -36,6 +36,7 @@ android {
     }
 
     sourceSets.main {
+        java.srcDir("../android-common/src/main/java")
         jniLibs.srcDir(nativeInput.dir("jni"))
         assets.srcDir(nativeInput.dir("assets"))
     }

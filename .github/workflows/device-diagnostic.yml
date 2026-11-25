@@ -1,0 +1,53 @@
+name: Android device diagnostic
+
+on:
+  push:
+    branches: [recovery/device-compatibility]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-34 build-tools;34.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.5"
+
+      - name: Build and verify the independent diagnostic APK
+        run: |
+          gradle :diagnostic:assembleDebug :app:compileDebugJavaWithJavac --no-daemon
+          apk=diagnostic/build/outputs/apk/debug/diagnostic-debug.apk
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify "$apk"
+          python3 - "$apk" <<'PY'
+          import sys
+          from zipfile import ZipFile
+          with ZipFile(sys.argv[1]) as archive:
+              names = archive.namelist()
+              assert "classes.dex" in names
+              assert not any(name.startswith(("lib/", "assets/")) for name in names)
+          PY
+          mkdir diagnostic-delivery
+          cp "$apk" diagnostic-delivery/NOVA-HD-Diagnostico.apk
+          (cd diagnostic-delivery && sha256sum NOVA-HD-Diagnostico.apk > SHA256SUMS)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NOVA-HD-Diagnostico
+          path: diagnostic-delivery/
+          if-no-files-found: error
+          retention-days: 30

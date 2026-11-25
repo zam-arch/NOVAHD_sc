@@ -1,0 +1,57 @@
+name: Deliver verified 4 KiB APK (private)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Private release tag holding the preserved APK
+        required: true
+        default: delivery-0.2
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deliver:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Require authorized private storage
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          if [[ "$IS_PRIVATE" != true ]]; then
+            echo "::error::The game APK may only be handled in an authorized private repository."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "build-tools;34.0.0"
+
+      - name: Verify the preserved APK without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          apk=NOVA-HD-v0.5-Recovery-ARM64-4KiB.apk
+          mkdir delivery
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern "$apk" --dir delivery -- "$RELEASE_TAG"
+          cd delivery
+          test "$(stat -c %s "$apk")" = 206306036
+          printf '%s  %s\n' 5b5efdeb540a481a7ffbf93ec64583aa638ce5905611866eb9aff342ef1729d0 "$apk" > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --print-certs "$apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NOVA-HD-Recovery-ARM64-4KiB
+          path: delivery/
+          if-no-files-found: error
+          retention-days: 7
