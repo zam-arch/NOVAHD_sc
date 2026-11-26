@@ -8,6 +8,7 @@ import android.os.Looper;
 import com.novahd.compat.DeviceMemory;
 import android.view.View;
 import android.widget.TextView;
+import android.widget.CheckBox;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.button.MaterialButton;
@@ -152,16 +153,19 @@ public final class ResourceManagerActivity extends AppCompatActivity {
         View content = getLayoutInflater().inflate(R.layout.dialog_settings, null);
         TextInputEditText input = content.findViewById(R.id.etDownloadUrl);
         input.setText(manager.source());
+        CheckBox overlay = content.findViewById(R.id.graphicsOverlay);
+        overlay.setChecked(getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE)
+                .getBoolean(GameDiagnosticsPanel.ENABLED, false));
         AlertDialog dialog = new MaterialAlertDialogBuilder(this).setTitle(R.string.settings_title)
                 .setView(content).setNegativeButton(android.R.string.cancel, null)
                 .setNeutralButton(R.string.device_diagnostics, (dialogInterface, which) ->
-                        new MaterialAlertDialogBuilder(this).setTitle(R.string.device_diagnostics)
-                                .setMessage(DeviceMemory.report())
-                                .setPositiveButton(android.R.string.ok, null).show())
+                        startActivity(new Intent(this, GraphicsDiagnosticsActivity.class)))
                 .setPositiveButton(android.R.string.ok, null).create();
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
             try {
                 manager.setSource(input.getText().toString().trim());
+                getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE).edit()
+                        .putBoolean(GameDiagnosticsPanel.ENABLED, overlay.isChecked()).apply();
                 dialog.dismiss();
             } catch (IOException error) {
                 input.setError(error.getMessage());

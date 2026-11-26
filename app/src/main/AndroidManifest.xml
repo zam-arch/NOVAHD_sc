@@ -24,6 +24,10 @@
             </intent-filter>
         </activity>
 
+        <activity android:name=".GraphicsDiagnosticsActivity"
+            android:process=":graphics_probe"
+            android:exported="false" />
+
         <activity
             android:name=".GameActivity"
             android:exported="false" android:launchMode="singleTask"

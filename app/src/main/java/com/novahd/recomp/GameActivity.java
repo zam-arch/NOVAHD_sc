@@ -6,6 +6,8 @@ import android.os.Bundle;
 import android.view.View;
 
 public class GameActivity extends NativeActivity {
+    private GameDiagnosticsPanel diagnostics;
+    private boolean resumed;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // Hide system bars for immersive gameplay
@@ -19,6 +21,20 @@ public class GameActivity extends NativeActivity {
             | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         
         super.onCreate(savedInstanceState);
+        if (getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE)
+                .getBoolean(GameDiagnosticsPanel.ENABLED, false)) diagnostics = new GameDiagnosticsPanel(this);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        resumed = true;
+        if (diagnostics != null && hasWindowFocus()) diagnostics.start();
+    }
+
+    @Override protected void onPause() {
+        resumed = false;
+        if (diagnostics != null) diagnostics.stop();
+        super.onPause();
     }
 
     @Override
@@ -30,6 +46,10 @@ public class GameActivity extends NativeActivity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        if (diagnostics != null) {
+            if (hasFocus && resumed) diagnostics.start();
+            else diagnostics.stop();
+        }
         if (hasFocus) {
             View decorView = getWindow().getDecorView();
             decorView.setSystemUiVisibility(

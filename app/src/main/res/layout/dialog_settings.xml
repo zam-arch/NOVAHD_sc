@@ -27,4 +27,8 @@
             android:hint="@string/settings_download_url" />
     </com.google.android.material.textfield.TextInputLayout>
 
+    <CheckBox android:id="@+id/graphicsOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/graphics_overlay_enable" />
 </LinearLayout>
