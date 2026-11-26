@@ -90,7 +90,7 @@ android {
     packagingOptions {
         jniLibs {
             useLegacyPackaging = true
-            if (officialEngine) keepDebugSymbols += ["**/libnovahd.so"]
+            if (officialEngine || rebuiltEngine) keepDebugSymbols += ["**/libnovahd.so"]
         }
     }
 }

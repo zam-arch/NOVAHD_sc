@@ -39,9 +39,24 @@ gradle :app:assembleRelease -PnovaNativeRecovery=true -PnovaRebuiltEngine=true \
 
 Para futuros enlaces, conservar el conjunto de objetos, `relink.json`, `image_meta.c` e `image.bin` juntos. El manifiesto comprueba los hashes, la arquitectura, el NDK y el ABI del traductor. La firma requiere el certificado experimental SHA-256 `ce235f8d30539f6d344c692983caf309dde2bdb915120c23d0ba23797076d035`.
 
+## Resultados de traducción y entrega
+
+| Comprobación | Resultado |
+|---|---|
+| Traducción | 21.230 de 21.230 entradas, cero stubs. Se generaron 48 fuentes de shards, `dispatch-runtime.c` y `protos.h`. |
+| Entradas de enlace | 48 shards y un dispatcher AArch64 reubicables. Los dos enlaces reutilizaron esos 49 objetos. ABI de `recomp.h` SHA-256 `67b600cfdcf5eb292601e60b03c34fb7bee9bf827062e14a22c8055578be8e23`. |
+| Enlace de referencia | 95.472.344 bytes, SHA-256 `ebaf12c0de556d06c412ad9ebacace07c3e0be6cec5f323833e2240b83e95877`. |
+| Enlace gestionado | 95.473.032 bytes, SHA-256 `002aac5440a452edfec125469366ef1bfd5736d0979b16d7481c30819368c679`, igual a la biblioteca dentro del APK. |
+| Verificaciones ELF | Ambos enlaces completados con `--no-undefined`. Igual conjunto de 21.230 símbolos de función que 0.4, `ANativeActivity_onCreate`, `rc_dispatch`, `rc_import`, alineación PT_LOAD de 16 KiB y las mismas ocho dependencias dinámicas de Android. |
+| APK | `com.novahd.recomp`, `0.9-recovery-arm64-4k`, versionCode 10, 206.157.784 bytes, SHA-256 `db94f4524e7f34cc8fd6d7d2650ba684fafb7340d6e96c434f02abbadf71cddf` |
+| Pruebas | Preflight IPA y rechazo de entradas alteradas, relink sintético NDK, guardia nula en Linux 4 KiB, aritmética de páginas de 4 y 16 KiB, fallback GLES simulado, fixture de sonda JNI y empaquetado de motor, sonda, imagen y 44 recursos reales. |
+| Pendiente en POCO | Instalar sobre 0.8.2, cargar una partida, comprobar audio, controles, cinemáticas y cambio de nivel. Repetir la escena con glitches. FPS presentados y validación real de 16 KiB quedan pendientes. |
+
+El APK firmado y los archivos reproducibles de traducción y enlace se entregan en el repositorio privado. La CI de código valida integración y pruebas sintéticas. La compilación con el IPA real se ejecutó en el entorno privado con los parámetros documentados. [Release privada](https://github.com/zam-arch/NOVAHD-private-test/releases/tag/private-recovery-v0.9) · [Validación de código](https://github.com/zam-arch/NOVAHD_sc/actions/runs/45740716369)
+
 ## Alcance
 
-La compilación de referencia usa los fuentes del runtime en `930cd60`. La variante gestionada habilita las correcciones 0.8 de profundidad y memoria y activa la telemetría de swaps de 0.8 por log. El APK planificado usa la sonda opcional de 0.8.2 y muestra el nombre de versión real. La campaña se valida o migra al directorio interno. El runtime conserva `home` bajo la ruta de archivos anterior. La variante de pruebas mantiene el límite de páginas de 4 KiB y deja las pruebas de 16 KiB para una validación separada.
+La compilación de referencia usa los fuentes del runtime en `930cd60`. La variante gestionada habilita las correcciones 0.8 de profundidad y memoria y activa la telemetría de swaps de 0.8 por log. El APK usa la sonda opcional de 0.8.2 y muestra el nombre de versión real. La campaña se valida o migra al directorio interno. El runtime conserva `home` bajo la ruta de archivos anterior. La variante de pruebas mantiene el límite de páginas de 4 KiB y deja las pruebas de 16 KiB para una validación separada.
 
 La cadencia de `eglSwapBuffers` y el intervalo entre retornos exitosos se registran en el log, junto con el tamaño EGL y el FBO intermedio cuando está activo. Los FPS presentados requieren timestamps del compositor. El bucle del runtime está programado a 60 Hz y llama a `rt_uikit_frame` en cada tick. Cambiar el periodo sin estudiar temporizadores, simulación y animaciones podría cambiar el comportamiento.
 
