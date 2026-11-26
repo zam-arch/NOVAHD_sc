@@ -43,6 +43,7 @@
  * rotated into the window at present time (see "the portrait drawable and its presentation" below).
  * GL calls come from the game's render thread only, so the tracked state needs no lock.
  */
+#include "presentation_rect.h"
 #include <stdio.h>
 #include <stdatomic.h>
 #include <stdlib.h>
@@ -544,9 +545,8 @@ static void present_blit(void) {
     mm(0x1700); li();
     mm(0x1701); li();
     mm(0x1702); li();
-    int wide = ww * present_w > wh * present_h; /* the layer's aspect, centred, black bars */
-    int vw = wide ? wh * present_h / present_w : ww, vh = wide ? wh : ww * present_w / present_h;
-    vp((ww - vw) / 2, (wh - vh) / 2, vw, vh);
+    struct presentation_rect r = fit_layer(ww, wh, present_h, present_w);
+    vp(r.x, r.y, r.w, r.h);
     cc(0, 0, 0, 1);
     cl(0x4000);
     en(0x0DE1);

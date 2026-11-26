@@ -54,6 +54,12 @@ static void clear_color(float r, float g, float b, float a) { color[0] = r; colo
 #define HOST(name, impl) do { P_##name.fn = (T_##name)impl; P_##name.tried = 1; } while (0)
 
 int main(void) {
+    struct presentation_rect ipad = fit_layer(1668, 768, 1024, 768);
+    assert(ipad.x == 322 && ipad.y == 0 && ipad.w == 1024 && ipad.h == 768);
+    struct presentation_rect wide = fit_layer(1668, 768, 1668, 768);
+    assert(wide.x == 0 && wide.w == 1668);
+    struct presentation_rect narrow = fit_layer(1024, 1024, 1024, 768);
+    assert(narrow.y == 128 && narrow.h == 768);
     HOST(glEnable, enable); HOST(glDisable, disable); HOST(glFrontFace, front);
     HOST(glGetIntegerv, integer); HOST(glGetFloatv, floats); HOST(glGetBooleanv, boolean);
     HOST(glGetPointerv, pointer); HOST(glGetTexEnviv, texenv); HOST(glIsEnabled, enabled);

@@ -77,6 +77,10 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
     void commandFromGame(int command, String[] ids) {
         if (command == 5) {
             if (ids.length > 0 && MusicLibrary.get(app).find(ids[0]) != null) {
+                if (guestOwnsPlayback && hasTrack() && !queue.get(index).id.equals(ids[0]) && !active()) {
+                    // The paused decoder belongs to the previous selection.
+                    stop();
+                }
                 rememberGuestTrack(ids[0]);
                 changed();
             }

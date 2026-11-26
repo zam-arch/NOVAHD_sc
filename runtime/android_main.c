@@ -68,6 +68,7 @@
  * sensor), so input and lifecycle are handled even when frames take longer than 1/60 s; then it waits for the next
  * frame time with ALooper_pollOnce, or runs the frame when it is due.
  */
+#include "presentation_rect.h"
 #include <EGL/egl.h>
 #include <android/asset_manager.h>
 #include <android/input.h>
@@ -113,6 +114,7 @@ static cpu_t *game_cpu; /* the game's main thread; set once the boot reaches the
 static int booted;      /* rt_platform_run has started: events go to UIKit */
 static int resumed = 1; /* the activity is between RESUME and PAUSE (it starts resumed: we are launched) */
 static int uikit_paused;
+static int reference_frame = 1; /* configured before NativeActivity starts its thread */
 static int buf_w = SCREEN_W, buf_h = SCREEN_H; /* the window buffers: the window's aspect around the 4:3 picture */
 static int win_w = SCREEN_W, win_h = SCREEN_H; /* the window in physical pixels (touch coordinates) */
 static int finger_ptr[MAX_FINGERS] = {-1, -1, -1, -1, -1}; /* Android pointer id held by each finger slot */
@@ -433,7 +435,7 @@ static void window_geometry(ANativeWindow *w) {
     buf_w = SCREEN_W; buf_h = SCREEN_H;
     if (win_w * 3 > win_h * 4) buf_w = (SCREEN_H * win_w / win_h + 1) & ~1;
     else buf_h = (SCREEN_W * win_h / win_w + 1) & ~1;
-    rt_gl_wide_long = buf_w > SCREEN_W ? buf_w : 0; /* widescreen: gles1.c fills the extra width with the 3D scene */
+    rt_gl_wide_long = !reference_frame && buf_w > SCREEN_W ? buf_w : 0; /* widescreen: gles1.c fills the extra width with the 3D scene */
     ANativeWindow_setBuffersGeometry(w, buf_w, buf_h, visual_format);
 }
 
@@ -509,15 +511,22 @@ static int finger_of(int32_t pid, int take) {
 
 static void touch(int phase, const AInputEvent *e, size_t i) {
     int32_t pid = AMotionEvent_getPointerId(e, i);
-    int f = finger_of(pid, phase == RT_TOUCH_BEGAN);
-    if (f < 0) return;
     static float finger_t[MAX_FINGERS][4]; /* how the 2D element under the finger was placed: kept for the touch */
     float x = AMotionEvent_getX(e, i) * buf_w / (float)win_w,
-          y = AMotionEvent_getY(e, i) * buf_h / (float)win_h - (buf_h - SCREEN_H) / 2;
+          y = AMotionEvent_getY(e, i) * buf_h / (float)win_h;
+    if (reference_frame) {
+        struct presentation_rect r = fit_layer(buf_w, buf_h, SCREEN_W, SCREEN_H);
+        int top = buf_h - r.y - r.h;
+        if (phase == RT_TOUCH_BEGAN && (x < r.x || x >= r.x + r.w || y < top || y >= top + r.h)) return;
+        x = (x - r.x) * SCREEN_W / r.w;
+        y = (y - top) * SCREEN_H / r.h;
+    } else y -= (buf_h - SCREEN_H) / 2;
+    int f = finger_of(pid, phase == RT_TOUCH_BEGAN);
+    if (f < 0) return;
     if (phase == RT_TOUCH_BEGAN) {
         float *t = finger_t[f];
         t[0] = 1; t[1] = 0; t[2] = 1; t[3] = 0;
-        if (buf_w > SCREEN_W) rt_gl_wide_touch(x, y, t);
+        if (rt_gl_wide_long) rt_gl_wide_touch(x, y, t);
     }
     x = x * finger_t[f][0] + finger_t[f][1];
     y = y * finger_t[f][2] + finger_t[f][3];
@@ -680,10 +689,10 @@ void rt_platform_graphics_sample(const char *details) {
 }
 
 JNIEXPORT void JNICALL
-Java_com_novahd_recomp_NativeWindowProbe_configureGraphics(JNIEnv *env, jclass cls, jboolean enabled, jint cull, jint hud, jint controls) {
+Java_com_novahd_recomp_NativeWindowProbe_configureGraphics(JNIEnv *env, jclass cls, jboolean enabled, jint cull, jboolean reference) {
     (void)env; (void)cls;
     rt_gl_configure_diagnostics(enabled, cull);
-    rt_gl_configure_scale(hud, controls);
+    reference_frame = reference == JNI_TRUE;
 }
 
 JNIEXPORT jstring JNICALL

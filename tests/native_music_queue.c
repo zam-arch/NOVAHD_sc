@@ -50,6 +50,11 @@ int main(void) {
     mu_play(&c, NULL); assert(!strcmp(requested, "b"));
     android_state = "1:b"; rt_offline_music_tick(&c); assert(notifications == 5);
     mu_current(&c, NULL); assert(c.r[0] == 12);
+    c.r[2] = 11; mu_set_item(&c, NULL); /* selection during playback starts A */
+    assert(last_command == RT_MUSIC_PLAY);
+    android_state = "1:a"; rt_offline_music_tick(&c);
+    android_state = "1:b"; rt_offline_music_tick(&c); /* backend advanced, UI follows B */
+    mu_current(&c, NULL); assert(c.r[0] == 12 && !music_selection_pending);
     mu_next(&c, NULL); assert(last_command == RT_MUSIC_NEXT);
     mu_prev(&c, NULL); assert(last_command == RT_MUSIC_PREVIOUS);
     mu_stop(&c, NULL); assert(last_command == RT_MUSIC_STOP);

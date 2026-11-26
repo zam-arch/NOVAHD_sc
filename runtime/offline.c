@@ -1302,7 +1302,6 @@ M(mu_play) {
     const char *selected = music_item_id(music_selected);
     const char *current = music_snapshot + 2;
     music_start(music_selection_pending || !*current ? selected : current);
-    music_selection_pending = 0;
     pthread_mutex_unlock(&music_lock);
 }
 M(mu_pause) { (void)m; (void)c; rt_platform_music_command(RT_MUSIC_PAUSE, NULL, 0); }
@@ -1371,6 +1370,10 @@ void rt_offline_music_tick(cpu_t *c) {
     pthread_mutex_lock(&music_lock);
     int playback_changed = music_snapshot[0] != state[0];
     memcpy(music_snapshot, state, strlen(state) + 1);
+    /* Keep the synchronous selection until Android confirms its ID. Later
+     * automatic/explicit advances must use the backend's current item. */
+    if (music_selected && !strcmp(state + 2, music_item_id(music_selected)))
+        music_selection_pending = 0;
     const char *visible = music_selection_pending && music_selected ? music_item_id(music_selected) : music_snapshot + 2;
     int item_changed = strcmp(music_reported_id, visible) != 0;
     snprintf(music_reported_id, sizeof music_reported_id, "%s", visible);

@@ -26,8 +26,8 @@ android {
         applicationId "com.novahd.recomp"
         minSdk 26
         targetSdk 34
-        versionCode(rebuiltEngine ? 13 : windowProbe ? 9 : (nativeRecovery ? 8 : 7))
-        versionName(rebuiltEngine ? "0.12-recovery-arm64-4k" : windowProbe ? "0.8.2-probe-arm64-4k" : nativeRecovery ? "0.8.1-recovery" : (officialEngine ? "0.7-recovery-arm64-4k" : "0.7-recovery"))
+        versionCode(rebuiltEngine ? 14 : windowProbe ? 9 : (nativeRecovery ? 8 : 7))
+        versionName(rebuiltEngine ? "0.13-recovery-arm64-4k" : windowProbe ? "0.8.2-probe-arm64-4k" : nativeRecovery ? "0.8.1-recovery" : (officialEngine ? "0.7-recovery-arm64-4k" : "0.7-recovery"))
         buildConfigField "boolean", "OFFICIAL_ENGINE", officialEngine.toString()
         
         buildConfigField "boolean", "FOUR_KIB_ONLY", (officialEngine || rebuiltEngine).toString()

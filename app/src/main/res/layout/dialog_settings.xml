@@ -38,21 +38,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:entries="@array/graphics_culling_modes" />
-        <LinearLayout android:id="@+id/hudScaleGroup"
+        <CheckBox android:id="@+id/referenceFrame"
+            android:text="@string/reference_frame"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
-            <Spinner android:id="@+id/hudScale"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-            <Spinner android:id="@+id/controlScale"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-            <Button android:id="@+id/resetHudScale"
-                android:text="@string/reset_hud_scale"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
+            android:layout_height="wrap_content" />
         <Button android:id="@+id/copyGraphicsTrace"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

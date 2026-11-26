@@ -57,7 +57,5 @@
         <item>Prueba sin face culling</item>
     </string-array>
     <string name="game_music_catalog_experiment">Probar catálogo musical del motor</string>
-    <string name="hud_scale">HUD y minimapa · %1$d %%</string>
-    <string name="control_scale">Controles de esquina · %1$d %%</string>
-    <string name="reset_hud_scale">Restaurar escalas predeterminadas</string>
+    <string name="reference_frame">Encuadre original de iPad (4:3 con bandas). Desmarca para usar panorámica.</string>
 </resources>

@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.view.View;
 
 public class GameActivity extends NativeActivity {
+    static final String REFERENCE_FRAME = "reference_4_3";
     private GameDiagnosticsPanel diagnostics;
     private boolean resumed;
     private android.view.SurfaceHolder gameSurface;
@@ -36,13 +37,12 @@ public class GameActivity extends NativeActivity {
             | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
             | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         
-        super.onCreate(savedInstanceState);
         android.content.SharedPreferences settings = getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE);
         boolean overlay = settings.getBoolean(GameDiagnosticsPanel.ENABLED, false);
         boolean nativeTrace = BuildConfig.REBUILT_ENGINE
                 && NativeWindowProbe.configure(overlay, settings.getInt(GameDiagnosticsPanel.CULLING, 0),
-                    settings.getInt(HudScaleSettings.HUD, HudScaleSettings.DEFAULT_HUD),
-                    settings.getInt(HudScaleSettings.CONTROLS, HudScaleSettings.DEFAULT_CONTROLS));
+                    settings.getBoolean(REFERENCE_FRAME, true));
+        super.onCreate(savedInstanceState);
         if (overlay) diagnostics = new GameDiagnosticsPanel(this, nativeTrace);
     }
 

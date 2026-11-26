@@ -174,7 +174,9 @@ public final class ResourceManagerActivity extends AppCompatActivity {
             android.widget.Toast.makeText(this, R.string.trace_copied, android.widget.Toast.LENGTH_SHORT).show();
         });
         android.content.SharedPreferences prefs = getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE);
-        HudScaleSettings scale = new HudScaleSettings(content, prefs);
+        CheckBox reference = content.findViewById(R.id.referenceFrame);
+        reference.setVisibility(BuildConfig.REBUILT_ENGINE ? View.VISIBLE : View.GONE);
+        reference.setChecked(prefs.getBoolean(GameActivity.REFERENCE_FRAME, true));
         AlertDialog dialog = new MaterialAlertDialogBuilder(this).setTitle(R.string.settings_title)
                 .setView(content).setNegativeButton(android.R.string.cancel, null)
                 .setNeutralButton(R.string.device_diagnostics, (dialogInterface, which) ->
@@ -187,7 +189,7 @@ public final class ResourceManagerActivity extends AppCompatActivity {
                         .putBoolean(GameDiagnosticsPanel.ENABLED, overlay.isChecked())
                         .putInt(GameDiagnosticsPanel.CULLING, culling.getSelectedItemPosition())
                         .putBoolean(GameDiagnosticsPanel.MUSIC_CATALOG, musicCatalog.isChecked());
-                scale.save(editor);
+                editor.putBoolean(GameActivity.REFERENCE_FRAME, reference.isChecked());
                 editor.apply();
                 dialog.dismiss();
             } catch (IOException error) {
