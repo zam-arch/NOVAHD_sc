@@ -52,7 +52,7 @@ Para futuros enlaces, conservar el conjunto de objetos, `relink.json`, `image_me
 | Pruebas | Preflight IPA y rechazo de entradas alteradas, relink sintético NDK, guardia nula en Linux 4 KiB, aritmética de páginas de 4 y 16 KiB, fallback GLES simulado, fixture de sonda JNI y empaquetado de motor, sonda, imagen y 44 recursos reales. |
 | Pendiente en POCO | Instalar sobre 0.8.2, cargar una partida, comprobar audio, controles, cinemáticas y cambio de nivel. Repetir la escena con glitches. FPS presentados y validación real de 16 KiB quedan pendientes. |
 
-El APK firmado y los archivos reproducibles de traducción y enlace se entregan en el repositorio privado. La CI de código valida integración y pruebas sintéticas. La compilación con el IPA real se ejecutó en el entorno privado con los parámetros documentados. [Release privada](https://github.com/zam-arch/NOVAHD-private-test/releases/tag/private-recovery-v0.9) · [Validación de código](https://github.com/zam-arch/NOVAHD_sc/actions/runs/45740716369)
+El APK firmado y los archivos reproducibles de traducción y enlace se entregan en el repositorio privado. La CI de código valida integración y pruebas sintéticas. La compilación con el IPA real se ejecutó en el entorno privado con los parámetros documentados. [Almacenamiento privado](https://github.com/zam-arch/NOVAHD-private-test/tree/delivery/v0.9/inputs/recovery-v0.9) · [Entrega privada de Actions](https://github.com/zam-arch/NOVAHD-private-test/actions/runs/45743562128) · [Validación de código](https://github.com/zam-arch/NOVAHD_sc/actions/runs/45743495650)
 
 ## Alcance
 
