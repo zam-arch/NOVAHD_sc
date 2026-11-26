@@ -24,3 +24,5 @@
 | Mandos, háptica y rendimiento | Conservar los controles originales como opción predeterminada. Evaluar posición y tamaño, sensibilidad por eje, mandos Bluetooth y vibración háptica. Antes de 90/120 Hz, medir presentación y desacoplar la simulación si depende de los ticks actuales. |
 
 El contrato nativo y sus pruebas están en [Recovery 0.8](RECOVERY-v0.8.md). La investigación gráfica, musical y panorámica está en [Recovery 0.7](RECOVERY-v0.7.md). La investigación técnica de red y mapas está en [Recovery 0.6](RECOVERY-v0.6.md). El trabajo de cada etapa posterior requiere aprobación.
+
+En 0.13 se añadió el encuadre de referencia 4:3 para comparar con el panorámico de 0.12. Se verificó la composición de rótulos de las tres pestañas y de la pista actual ejecutando las rutinas traducidas. Quedan la comparación del HUD y del minimapa durante Yelena, la correspondencia física del toque y el indicador musical en el POCO. Se mantienen los perfiles de resolución y calidad, 30/60/90/120 FPS y los objetivos de compatibilidad, controles, red y mapas anteriores. [Informe 0.13](RECOVERY-v0.13.md)
