@@ -187,6 +187,7 @@ void rt_gl_bind_drawable(uint32_t renderbuffer, int width, int height); /* that 
 #ifdef NOVA_FRAME_LOG
 void rt_gl_measure_render(int *width, int *height);
 void rt_gl_configure_diagnostics(int enabled, int cull);
+void rt_gl_configure_scale(int hud, int controls);
 void rt_platform_graphics_sample(const char *details);
 void rt_platform_graphics_event(const char *details);
 #endif
@@ -234,7 +235,7 @@ void rt_platform_run(cpu_t *c);
  * on one thread at a time, so the main thread gives it up when it enters rt_platform_run. */
 void rt_platform_make_current(void);
 #ifdef __ANDROID__
-enum { RT_MUSIC_PLAY, RT_MUSIC_PAUSE, RT_MUSIC_STOP, RT_MUSIC_NEXT, RT_MUSIC_PREVIOUS };
+enum { RT_MUSIC_PLAY, RT_MUSIC_PAUSE, RT_MUSIC_STOP, RT_MUSIC_NEXT, RT_MUSIC_PREVIOUS, RT_MUSIC_SELECT };
 void rt_platform_music_command(int command, const char *const *ids, size_t count);
 void rt_platform_music_state(char state[40]);
 void rt_offline_music_tick(cpu_t *c);

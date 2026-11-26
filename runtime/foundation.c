@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "rt.h"
+#include "utf16_access.h"
 
 #define STR_OWNED 0x80000000u
 #define STR_UTF16 0x10u /* in the constant-string flags: 0x7d0 vs 0x7c8 */
@@ -164,8 +165,8 @@ M(s_get_cstring) { /* getCString:maxLength:encoding: */
     memcpy(rt_mem + dst, s, n + 1);
     rt_ret(c, 1);
 }
-M(s_length) { (void)m; rt_ret(c, (uint32_t)strlen(U(c))); }
-M(s_char_at) { (void)m; const char *s = U(c); uint32_t k = ARG(0); rt_ret(c, k < strlen(s) ? (uint8_t)s[k] : 0); }
+M(s_length) { (void)m; const char *s = U(c); rt_ret(c, utf16_units(s, s + strlen(s))); }
+M(s_char_at) { (void)m; rt_ret(c, utf16_unit_at(U(c), ARG(0))); }
 M(s_is_equal) {
     (void)m;
     const char *o = rt_nsstring_utf8(ARG(0));
@@ -288,31 +289,28 @@ M(s_upper) { (void)m; caseconv(c, 1); }
 M(s_substr_from) {
     (void)m;
     const char *s = U(c);
-    uint32_t n = (uint32_t)strlen(s), k = ARG(0);
-    if (k > n) k = n;
-    rt_ret(c, str_auto(c, s + k, n - k));
+    const char *start = utf16_boundary(s, ARG(0));
+    rt_ret(c, str_auto(c, start, (uint32_t)strlen(start)));
 }
 M(s_substr_to) {
     (void)m;
     const char *s = U(c);
-    uint32_t n = (uint32_t)strlen(s), k = ARG(0);
-    rt_ret(c, str_auto(c, s, k < n ? k : n));
+    rt_ret(c, str_auto(c, s, (uint32_t)(utf16_boundary(s, ARG(0)) - s)));
 }
 M(s_substr_range) { /* substringWithRange:(NSRange){loc, len} in two argument words */
     (void)m;
     const char *s = U(c);
-    uint32_t n = (uint32_t)strlen(s), loc = ARG(0), len = ARG(1);
-    if (loc > n) loc = n;
-    if (len > n - loc) len = n - loc;
-    rt_ret(c, str_auto(c, s + loc, len));
+    uint64_t loc = ARG(0), len = ARG(1);
+    const char *start = utf16_boundary(s, loc), *end = utf16_boundary(s, loc + len);
+    rt_ret(c, str_auto(c, start, (uint32_t)(end - start)));
 }
 /* rangeOfString: returns an NSRange through objc_msgSend_stret: r0 result, r1 self, r2 _cmd, r3 the argument */
 M(s_range_of) {
     (void)m;
     const char *s = rt_nsstring_utf8(c->r[1]), *o = rt_nsstring_utf8(c->r[3]);
     const char *hit = (s && o && *o) ? strstr(s, o) : NULL;
-    rt_st32(c->r[0], hit ? (uint32_t)(hit - s) : 0x7fffffffu); /* NSNotFound */
-    rt_st32(c->r[0] + 4, hit ? (uint32_t)strlen(o) : 0);
+    rt_st32(c->r[0], hit ? utf16_units(s, hit) : 0x7fffffffu); /* NSNotFound */
+    rt_st32(c->r[0] + 4, hit ? utf16_units(o, o + strlen(o)) : 0);
 }
 M(s_copy) {
     (void)m;

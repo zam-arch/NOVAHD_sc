@@ -680,9 +680,10 @@ void rt_platform_graphics_sample(const char *details) {
 }
 
 JNIEXPORT void JNICALL
-Java_com_novahd_recomp_NativeWindowProbe_configureGraphics(JNIEnv *env, jclass cls, jboolean enabled, jint cull) {
+Java_com_novahd_recomp_NativeWindowProbe_configureGraphics(JNIEnv *env, jclass cls, jboolean enabled, jint cull, jint hud, jint controls) {
     (void)env; (void)cls;
     rt_gl_configure_diagnostics(enabled, cull);
+    rt_gl_configure_scale(hud, controls);
 }
 
 JNIEXPORT jstring JNICALL
@@ -724,6 +725,11 @@ static void log_swap_sample(EGLSurface target) {
     uint64_t gap = now - previous;
     if (sample_count < sizeof samples / sizeof samples[0]) samples[sample_count++] = gap;
     if (gap > maximum) maximum = gap;
+    if (gap >= UINT64_C(100000000)) {
+        char event[80];
+        snprintf(event, sizeof event, "intervalo entre swaps %.2f ms", gap / 1e6);
+        rt_platform_graphics_event(event);
+    }
     if (now - start >= UINT64_C(1000000000)) {
         EGLint w, h;
         int rw, rh;

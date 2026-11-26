@@ -173,6 +173,8 @@ public final class ResourceManagerActivity extends AppCompatActivity {
             clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NOVA HD GLES", trace));
             android.widget.Toast.makeText(this, R.string.trace_copied, android.widget.Toast.LENGTH_SHORT).show();
         });
+        android.content.SharedPreferences prefs = getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE);
+        HudScaleSettings scale = new HudScaleSettings(content, prefs);
         AlertDialog dialog = new MaterialAlertDialogBuilder(this).setTitle(R.string.settings_title)
                 .setView(content).setNegativeButton(android.R.string.cancel, null)
                 .setNeutralButton(R.string.device_diagnostics, (dialogInterface, which) ->
@@ -181,10 +183,12 @@ public final class ResourceManagerActivity extends AppCompatActivity {
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
             try {
                 manager.setSource(input.getText().toString().trim());
-                getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE).edit()
+                android.content.SharedPreferences.Editor editor = prefs.edit()
                         .putBoolean(GameDiagnosticsPanel.ENABLED, overlay.isChecked())
                         .putInt(GameDiagnosticsPanel.CULLING, culling.getSelectedItemPosition())
-                        .putBoolean(GameDiagnosticsPanel.MUSIC_CATALOG, musicCatalog.isChecked()).apply();
+                        .putBoolean(GameDiagnosticsPanel.MUSIC_CATALOG, musicCatalog.isChecked());
+                scale.save(editor);
+                editor.apply();
                 dialog.dismiss();
             } catch (IOException error) {
                 input.setError(error.getMessage());

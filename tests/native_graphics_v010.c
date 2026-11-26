@@ -9,6 +9,8 @@ static float color[4] = {0.2f, 0.3f, 0.4f, 0.5f};
 static float matrices[3][16];
 static E matrix_mode = 0x1701;
 static int did_swap;
+static I last_scissor[4];
+void rt_platform_graphics_event(const char *details) { (void)details; }
 
 void rt_log(const char *fmt, ...) { (void)fmt; }
 void rt_platform_size(int *w, int *h) { *w = 2048; *h = 768; }
@@ -37,6 +39,7 @@ static uint8_t enabled(E cap) { (void)cap; return 0; }
 static void one(E a) { (void)a; }
 static void two(E a, E b) { (void)a; (void)b; }
 static void rectangle(I a, I b, I c, I d) { (void)a; (void)b; (void)c; (void)d; }
+static void scissor_rectangle(I a, I b, I c, I d) { last_scissor[0] = a; last_scissor[1] = b; last_scissor[2] = c; last_scissor[3] = d; }
 static void rgba(float a, float b, float c, float d) { (void)a; (void)b; (void)c; (void)d; }
 static void mask(uint8_t a, uint8_t b, uint8_t c, uint8_t d) { (void)a; (void)b; (void)c; (void)d; }
 static void env(E a, E b, I c) { (void)a; (void)b; (void)c; }
@@ -57,7 +60,7 @@ int main(void) {
     HOST(glEnableClientState, one); HOST(glDisableClientState, one); HOST(glBindFramebufferOES, two);
     HOST(glBindTexture, two); HOST(glBindBuffer, two); HOST(glActiveTexture, one); HOST(glClientActiveTexture, one);
     HOST(glMatrixMode, mode); HOST(glLoadIdentity, identity); HOST(glLoadMatrixf, load);
-    HOST(glViewport, rectangle); HOST(glScissor, rectangle); HOST(glColor4f, rgba); HOST(glColorMask, mask);
+    HOST(glViewport, rectangle); HOST(glScissor, scissor_rectangle); HOST(glColor4f, rgba); HOST(glColorMask, mask);
     HOST(glTexEnvi, env); HOST(glVertexPointer, array); HOST(glTexCoordPointer, array); HOST(glColorPointer, array);
     HOST(glNormalPointer, normal); HOST(glDrawArrays, draw); HOST(glClearColor, clear_color); HOST(glClear, one);
     *cap_slot(0x0B44) = 1;
@@ -81,7 +84,8 @@ int main(void) {
         hit_cur_n = 0;
         struct place placement;
         wide_place(0.7f, 0.82f, 0.6f, 0.78f, &placement);
-        assert(placement.sx == 1 && placement.sy == 1);
+        assert(placement.sx == placement.sy);
+        assert(k ? placement.sx > 1 : placement.sx == 1);
         struct place with_hud = placement;
         hud_on = 0;
         hit_cur_n = 0;
@@ -99,6 +103,36 @@ int main(void) {
             assert(fabsf(x * transform[2] + transform[3] - 123) < 0.01f);
         } else assert(placement.sx == 1);
     }
+    present_h = rt_gl_wide_long = 1668;
+    game_sc[0] = 656; game_sc[1] = 643; game_sc[2] = 105; game_sc[3] = 200;
+    assert(map_scissor());
+    struct place map, rim, caption, control;
+    anchor_corner(&map, 1024, 768, 1, 1, 135);
+    wide_place(643.0f * 2 / 1024 - 1, 843.0f * 2 / 1024 - 1,
+               656.0f * 2 / 768 - 1, 761.0f * 2 / 768 - 1, &rim);
+    assert(!memcmp(&map, &rim, sizeof map));
+    wide_place(-1, 1, -0.10f, -0.05f, &caption);
+    assert(caption.sx == 1 && caption.sy == 1);
+    wide_place(0.62f, 0.94f, -0.95f, -0.61f, &control);
+    assert(fabsf(control.sx - 1.40f) < 0.001f);
+    rt_gl_configure_scale(75, 150);
+    wide_place(0.62f, 0.94f, -0.95f, -0.61f, &control);
+    assert(fabsf(control.sx - 1.50f) < 0.001f);
+    wide_place(643.0f * 2 / 1024 - 1, 843.0f * 2 / 1024 - 1,
+               656.0f * 2 / 768 - 1, 761.0f * 2 / 768 - 1, &rim);
+    assert(rim.sx == 0.75f);
+    present_fbo = 9; drawable_fb = bound_fb = 8;
+    *cap_slot(0x0C11) = 1;
+    sh_pj[sh_pj_sp][11] = -1; proj_dirty = wide_dirty = 1;
+    wide_apply(0, 0, 0, 0, 0, NULL);
+    I clear_scissor[4]; memcpy(clear_scissor, last_scissor, sizeof clear_scissor);
+    wide_apply(2, 4, 0, 3, 0x1403, NULL);
+    assert(!memcmp(clear_scissor, last_scissor, sizeof clear_scissor));
+    assert(last_scissor[3] == 150 && !proj_scaled);
+    *cap_slot(0x0C11) = 0;
+    wide_apply(2, 4, 0, 3, 0x1403, NULL);
+    assert(proj_scaled);
+    puts("Map frame shares the captured scissor transform. Caption scale is independent.");
     puts("HUD fixture preserves scale proportions and inverse touch from 4:3 to 21:9.");
     puts("Blit restores captured matrices and clear color. Cull overrides are scoped and reversible.");
 }

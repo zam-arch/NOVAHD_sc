@@ -1,4 +1,5 @@
 #include <assert.h>
+#include "../runtime/utf16_access.h"
 #define __ANDROID__
 #include "../runtime/offline.c"
 
@@ -17,6 +18,8 @@ void *rt_objc_state(id obj, size_t size) {
     return &sample_items[obj - 11];
 }
 const char *rt_nsstring_utf8(id value) { return value == 21 ? "a" : value == 22 ? "b" : ""; }
+id rt_nsstring_new(const char *text) { (void)text; return 30; }
+id rt_nsdict_get(id dictionary, id key) { (void)dictionary; (void)key; return 0; }
 uint32_t rt_nsarray_count(id array) { return array == 7 ? 2 : 0; }
 id rt_nsarray_at(id array, uint32_t index) { assert(array == 7); return 11 + index; }
 double rt_now(void) { static double time; return ++time; }
@@ -42,11 +45,18 @@ int main(void) {
     mu_pause(&c, NULL); assert(last_command == RT_MUSIC_PAUSE);
     android_state = "2:a"; rt_offline_music_tick(&c); assert(notifications == 3);
     c.r[2] = 12; mu_set_item(&c, NULL);
+    assert(last_command == RT_MUSIC_SELECT && !strcmp(requested, "b"));
+    mu_current(&c, NULL); assert(c.r[0] == 12);
     mu_play(&c, NULL); assert(!strcmp(requested, "b"));
     android_state = "1:b"; rt_offline_music_tick(&c); assert(notifications == 5);
     mu_current(&c, NULL); assert(c.r[0] == 12);
     mu_next(&c, NULL); assert(last_command == RT_MUSIC_NEXT);
     mu_prev(&c, NULL); assert(last_command == RT_MUSIC_PREVIOUS);
     mu_stop(&c, NULL); assert(last_command == RT_MUSIC_STOP);
+    const char *title = "Andr\xc3\xa9 - \xf0\x9f\x8e\xb5";
+    assert(utf16_units(title, title + strlen(title)) == 10);
+    assert(utf16_unit_at(title, 4) == 0xe9);
+    assert(utf16_unit_at(title, 8) == 0xd83c && utf16_unit_at(title, 9) == 0xdfb5);
+    assert(!strcmp(utf16_boundary(title, 5), " - \xf0\x9f\x8e\xb5"));
     puts("Original player guest selectors route selection, playback, pause, skips, stop and notifications.");
 }

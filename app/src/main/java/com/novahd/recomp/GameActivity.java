@@ -40,7 +40,9 @@ public class GameActivity extends NativeActivity {
         android.content.SharedPreferences settings = getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE);
         boolean overlay = settings.getBoolean(GameDiagnosticsPanel.ENABLED, false);
         boolean nativeTrace = BuildConfig.REBUILT_ENGINE
-                && NativeWindowProbe.configure(overlay, settings.getInt(GameDiagnosticsPanel.CULLING, 0));
+                && NativeWindowProbe.configure(overlay, settings.getInt(GameDiagnosticsPanel.CULLING, 0),
+                    settings.getInt(HudScaleSettings.HUD, HudScaleSettings.DEFAULT_HUD),
+                    settings.getInt(HudScaleSettings.CONTROLS, HudScaleSettings.DEFAULT_CONTROLS));
         if (overlay) diagnostics = new GameDiagnosticsPanel(this, nativeTrace);
     }
 
@@ -58,7 +60,9 @@ public class GameActivity extends NativeActivity {
     }
 
     public String readGameMusicState() {
-        return ((RecoveryApplication) getApplication()).music().guestSnapshot();
+        return getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE)
+                .getBoolean(GameDiagnosticsPanel.MUSIC_CATALOG, false)
+                ? ((RecoveryApplication) getApplication()).music().guestSnapshot() : "0:";
     }
 
     @Override protected void onResume() {

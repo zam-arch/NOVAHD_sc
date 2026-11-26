@@ -349,6 +349,12 @@ static int wide_apply(int kind, E mode, I first, I count, E itype, const void *i
 /* a placement on the layer: Y' = Y * sy + oy along its long axis, X' = X * sx + ox along the short one */
 struct place { float sy, oy, sx, ox; };
 /* Last-frame placement of compact edge elements for exact inverse touch translation. */
+static atomic_int hud_percent = 135, control_percent = 140;
+
+void rt_gl_configure_scale(int hud, int controls) {
+    atomic_store(&hud_percent, hud >= 75 && hud <= 150 ? hud : 135);
+    atomic_store(&control_percent, controls >= 75 && controls <= 150 ? controls : 140);
+}
 enum { HIT_MAX = 512 };
 /* in screen terms: y0..y1 across, x0..x1 down, t as rt_gl_wide_touch gives it */
 static struct hit { float y0, y1, x0, x1, t[4]; } hit_cur[HIT_MAX], hit_last[HIT_MAX];
@@ -362,6 +368,7 @@ static int present_failed;
 static E packed_status, depth_status;
 #ifdef NOVA_FRAME_LOG
 static atomic_int trace_enabled;
+static _Thread_local uint32_t graphics_guest_lr;
 static atomic_int cull_override;
 void rt_gl_configure_diagnostics(int enabled, int cull) {
     atomic_store(&trace_enabled, enabled != 0);
@@ -731,6 +738,7 @@ IMP(glDrawElements) {
     T_glDrawElements draw = F(glDrawElements);
     const void *indices = index_ptr(A(3));
 #ifdef NOVA_FRAME_LOG
+    graphics_guest_lr = c->r[14];
     int override = cull_begin();
 #endif
     if (!wide_apply(2, A(0), 0, (I)A(1), A(2), indices) && draw)
@@ -743,6 +751,7 @@ IMP(glDrawElements) {
 IMP(glDrawArrays) {
     T_glDrawArrays draw = F(glDrawArrays);
 #ifdef NOVA_FRAME_LOG
+    graphics_guest_lr = c->r[14];
     int override = cull_begin();
 #endif
     if (!wide_apply(1, A(0), (I)A(1), (I)A(2), 0, NULL) && draw)
@@ -870,33 +879,63 @@ static int draw_extent(int kind, I first, I count, E itype, const void *idx, flo
     return 1;
 }
 
-/* a 2D element spanning lo..hi (normalised device coordinates of the game's viewport): its placement on the layer */
+/* The campaign capture gives a small rectangle along the top of the rotated drawable.
+ * Require the whole rectangle in that corner so generic scissor users retain their own path. */
+static int map_bounds(float a, float b, float va, float vb) {
+    return a >= 0.55f && b <= 1.015f && b - a >= 0.08f && b - a <= 0.34f
+        && va >= -0.015f && vb <= 0.24f && vb - va >= 0.06f;
+}
+
+static int map_scissor(void) {
+    float g = (float)drawable_h, w = (float)drawable_w;
+    return w > 0 && map_bounds(game_sc[1] / g, (game_sc[1] + game_sc[3]) / g,
+                               1 - (game_sc[0] + game_sc[2]) / w, 1 - game_sc[0] / w);
+}
+
+static void anchor_corner(struct place *p, float g, float w, int right, int top, int percent) {
+    float scale = fminf(percent / 100.0f, present_h / g);
+    p->sx = p->sy = scale;
+    p->ox = top ? w * (1 - scale) : 0;
+    p->oy = right ? present_h - g * scale : 0;
+}
+
+/* Place a 2D batch from its logical bounds. Text-like strips keep unit scale. */
 static void wide_place(float lo, float hi, float xa, float xb, struct place *p) {
     float g = (float)drawable_h, w = drawable_w ? (float)drawable_w : 768.0f;
     float a = (game_vp[1] + (lo + 1) / 2 * game_vp[3]) / g, b = (game_vp[1] + (hi + 1) / 2 * game_vp[3]) / g;
-    /* down the screen (0 the top, 1 the bottom): the layer's short axis runs the other way */
     float va = 1 - (game_vp[0] + (xb + 1) / 2 * game_vp[2]) / w, vb = 1 - (game_vp[0] + (xa + 1) / 2 * game_vp[2]) / w;
     int m = (present_h - drawable_h) / 2;
-    /* stretched: what spans the screen (backgrounds, bars, fades) and tall pieces of a tiled background; a line of
-     * text that happens to reach one edge is not */
     int both = a <= 0.02f && b >= 0.98f, one = a <= 0.02f || b >= 0.98f;
     float tall = vb - va, side = wide_s((a + b) / 2);
-    p->sx = 1; p->ox = 0;
-    if ((both || (one && b - a >= 0.45f)) && tall >= 0.25f) { p->sy = present_h / g; p->oy = 0; return; }
-    p->sy = 1; p->oy = (float)(m + (int)(m * side)); /* smaller: same size, moved towards its edge */
-    /* A viewport describes arbitrary batches, including captions and scissored UI. Keep its
-     * logical scale fixed even when the old pause-button heuristic changes during a dialogue. */
+    *p = (struct place){1, (float)(m + (int)(m * side)), 1, 0};
+    if ((both || (one && b - a >= 0.45f)) && tall >= 0.25f) {
+        p->sy = present_h / g;
+        p->oy = 0;
+        return;
+    }
     if (frame_3d && a > 0.80f && vb < 0.12f && b - a > 0.03f) hud_seen = 1;
-    if (frame_3d && fabsf(side) >= 1 && b - a < 0.35f && tall < 0.35f && hit_cur_n < HIT_MAX) {
+    /* Legacy hud_on is diagnostic only. Restrict enlargement to compact corner geometry:
+     * an upper instrument/icon or a lower control-sized element. */
+    int top = va >= -0.015f && vb <= 0.24f;
+    int bottom = va >= 0.73f && vb <= 1.015f;
+    int compact = fabsf(side) >= 1 && b - a >= 0.045f && b - a <= 0.30f && tall >= 0.055f;
+    if (map_bounds(a, b, va, vb))
+        anchor_corner(p, g, w, 1, 1, atomic_load(&hud_percent));
+    else if (compact && (top || bottom))
+        anchor_corner(p, g, w, side > 0, top, atomic_load(bottom ? &control_percent : &hud_percent));
+
+    /* Use the affine inverse of this exact visual placement for an edge element. */
+    if (fabsf(side) >= 1 && b - a < 0.35f && tall < 0.35f &&
+        (frame_3d || (compact && (top || bottom))) && hit_cur_n < HIT_MAX) {
         struct hit *h = &hit_cur[hit_cur_n++];
-        h->y0 = present_h - (b * g + p->oy) - 12;
-        h->y1 = present_h - (a * g + p->oy) + 12;
-        h->x0 = va * w - 12;
-        h->x1 = vb * w + 12;
-        h->t[0] = 1;
-        h->t[1] = g - present_h + p->oy;
-        h->t[2] = 1;
-        h->t[3] = 0;
+        h->y0 = present_h - (b * g * p->sy + p->oy) - 12;
+        h->y1 = present_h - (a * g * p->sy + p->oy) + 12;
+        h->x0 = w - ((1 - va) * w * p->sx + p->ox) - 12;
+        h->x1 = w - ((1 - vb) * w * p->sx + p->ox) + 12;
+        h->t[0] = 1 / p->sy;
+        h->t[1] = g - (present_h - p->oy) / p->sy;
+        h->t[2] = 1 / p->sx;
+        h->t[3] = w - (w - p->ox) / p->sx;
     }
 }
 
@@ -923,8 +962,8 @@ static void trace_wide_pass(enum wide_pass pass, const struct place *place, cons
     memcpy(entry->sc, scissor, sizeof entry->sc);
     char line[256];
     snprintf(line, sizeof line,
-             "%s fb=%u HUD=%d/%d scale=%.3f,%.3f VP=%d,%d,%d,%d SC=%d,%d,%d,%d",
-             names[pass], bound_fb, hud_on, hud_seen, place->sx, place->sy,
+             "%s lr=%#x fb=%u HUD=%d/%d scale=%.3f,%.3f VP=%d,%d,%d,%d SC=%d,%d,%d,%d",
+             names[pass], graphics_guest_lr, bound_fb, hud_on, hud_seen, place->sx, place->sy,
              viewport[0], viewport[1], viewport[2], viewport[3], scissor[0], scissor[1], scissor[2], scissor[3]);
     rt_platform_graphics_event(line);
 }
@@ -941,9 +980,13 @@ static void wide_set(const struct place *p, enum wide_pass pass) {
     if (!changed) return;
 #endif
     I viewport[] = {lroundf(game_vp[0] * p->sx + p->ox), lroundf(game_vp[1] * p->sy + p->oy),
-                    lroundf(game_vp[2] * p->sx), lroundf(game_vp[3] * p->sy)};
+                    0, 0};
+    viewport[2] = lroundf((game_vp[0] + (double)game_vp[2]) * p->sx + p->ox) - viewport[0];
+    viewport[3] = lroundf((game_vp[1] + (double)game_vp[3]) * p->sy + p->oy) - viewport[1];
     I scissor[] = {lroundf(game_sc[0] * p->sx + p->ox), lroundf(game_sc[1] * p->sy + p->oy),
-                   lroundf(game_sc[2] * p->sx), lroundf(game_sc[3] * p->sy)};
+                   0, 0};
+    scissor[2] = lroundf((game_sc[0] + (double)game_sc[2]) * p->sx + p->ox) - scissor[0];
+    scissor[3] = lroundf((game_sc[1] + (double)game_sc[3]) * p->sy + p->oy) - scissor[1];
 #ifdef NOVA_FRAME_LOG
     trace_wide_pass(pass, p, viewport, scissor);
 #else
@@ -1041,11 +1084,12 @@ static int wide_apply(int kind, E mode, I first, I count, E itype, const void *i
         proj_dirty = 0;
         wide_dirty = 1;
     }
-    int want = on && proj_persp;
     /* what is drawn clipped to a small scissor rectangle (the minimap's terrain: one large mesh and its markers) is
      * one element, placed by that rectangle like the frame drawn around it */
     int clip = on && *cap_slot(0x0C11) && game_sc[2] > 0 && game_sc[3] > 0 && game_vp[2] > 0 && game_vp[3] > 0 &&
                game_sc[2] * 10 < drawable_w * 6 && game_sc[3] * 10 < drawable_h * 6;
+    int map = clip && map_scissor();
+    int want = on && proj_persp && !map;
     if (want != proj_scaled) {
         proj_scaled = want;
         sh_proj_for_gl(m);
@@ -1057,9 +1101,13 @@ static int wide_apply(int kind, E mode, I first, I count, E itype, const void *i
     /* placement along the long axis: y' = y * num / drawable_h + off */
     struct place p = {1, 0, 1, 0};
     if (on && want && kind) frame_3d = 1;
-    if (clip && (!want || kind == 0))
-        wide_place((game_sc[1] - game_vp[1]) * 2.0f / game_vp[3] - 1, (game_sc[1] + game_sc[3] - game_vp[1]) * 2.0f / game_vp[3] - 1,
-                   (game_sc[0] - game_vp[0]) * 2.0f / game_vp[2] - 1, (game_sc[0] + game_sc[2] - game_vp[0]) * 2.0f / game_vp[2] - 1, &p);
+    if (map)
+        anchor_corner(&p, (float)drawable_h, (float)drawable_w, 1, 1, atomic_load(&hud_percent));
+    else if (clip && (!want || kind == 0)) {
+        float middle = (game_sc[1] + game_sc[3] * 0.5f) / drawable_h;
+        float margin = (present_h - drawable_h) / 2;
+        p.oy = margin + (int)(margin * wide_s(middle));
+    }
     else if (on && (want || kind == 0)) p.sy = (float)present_h / drawable_h; /* the 3D scene and clears: the whole layer */
     else if (on) {
         float lo, hi;
@@ -1590,7 +1638,14 @@ IMP(glEnable) { T_glEnable f = F(glEnable); if (A(0) == 0x0DE1) tex2d_on[act_uni
 IMP(glDisable) { T_glDisable f = F(glDisable); if (A(0) == 0x0DE1) tex2d_on[act_unit] = 0; else *cap_slot(A(0)) = 0; if (f) f(A(0)); }
 IMP(glAlphaFunc) { T_glAlphaFunc f = F(glAlphaFunc); if (f) f(A(0), FA(1)); }
 IMP(glBlendFunc) { T_glBlendFunc f = F(glBlendFunc); if (f) f(A(0), A(1)); }
-IMP(glClear) { T_glClear f = F(glClear); wide_apply(0, 0, 0, 0, 0, NULL); if (f) f(A(0)); }
+IMP(glClear) {
+    T_glClear f = F(glClear);
+#ifdef NOVA_FRAME_LOG
+    graphics_guest_lr = c->r[14];
+#endif
+    wide_apply(0, 0, 0, 0, 0, NULL);
+    if (f) f(A(0));
+}
 IMP(glClearColor) { T_glClearColor f = F(glClearColor); if (f) f(FA(0), FA(1), FA(2), FA(3)); }
 IMP(glClearDepthf) { T_glClearDepthf f = F(glClearDepthf); if (f) f(FA(0)); }
 IMP(glColorMask) { T_glColorMask f = F(glColorMask); if (f) f(B(0), B(1), B(2), B(3)); }

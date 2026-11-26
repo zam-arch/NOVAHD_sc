@@ -32,11 +32,14 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
     private Runnable listener;
     private volatile String guestSnapshot = "0:";
     private boolean guestOwnsPlayback;
+    private String rememberedGuestTrack;
 
     MusicPlayer(Application app) {
         this.app = app;
         audio = app.getSystemService(AudioManager.class);
         preferences = app.getSharedPreferences("music_player", Application.MODE_PRIVATE);
+        rememberedGuestTrack = preferences.getString("guest_track_id", "");
+        guestSnapshot = "0:" + rememberedGuestTrack;
         volume = Math.max(0, Math.min(100, preferences.getInt("volume", 45)));
         shuffle = preferences.getBoolean("shuffle", false);
         repeat = preferences.getBoolean("repeat", false);
@@ -58,21 +61,37 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
     void observe(Runnable listener) { this.listener = listener; }
 
     private void changed() {
-        guestSnapshot = !guestOwnsPlayback || !hasTrack() ? "0:" :
+        guestSnapshot = !guestOwnsPlayback || !hasTrack() ? "0:" + rememberedGuestTrack :
                 (playing ? "1:" : completed ? "0:" : "2:") + queue.get(index).id;
         if (listener != null) listener.run();
     }
 
     String guestSnapshot() { return guestSnapshot; }
 
+    private void rememberGuestTrack(String id) {
+        if (id.equals(rememberedGuestTrack)) return;
+        rememberedGuestTrack = id;
+        preferences.edit().putString("guest_track_id", id).apply();
+    }
+
     void commandFromGame(int command, String[] ids) {
-        if (command == 0) {
+        if (command == 5) {
+            if (ids.length > 0 && MusicLibrary.get(app).find(ids[0]) != null) {
+                rememberGuestTrack(ids[0]);
+                changed();
+            }
+        } else if (command == 2) {
+            rememberGuestTrack("");
+            if (guestOwnsPlayback) stop();
+            else changed();
+        } else if (command == 0) {
             if (ids.length == 0) return;
             MusicLibrary library = MusicLibrary.get(app);
             List<MusicLibrary.Track> songs = library.resolve(ids);
             if (songs.isEmpty()) return;
             MusicLibrary.Track track = library.find(ids[0]);
             if (track == null || !songs.contains(track)) track = songs.get(0);
+            rememberGuestTrack(track.id);
             guestOwnsPlayback = true;
             if (hasTrack() && queue.get(index).equals(track)) {
                 setSelection(songs, track);
@@ -85,7 +104,6 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
         } else if (guestOwnsPlayback) {
             switch (command) {
                 case 1: pause(); break;
-                case 2: stop(); break;
                 case 3: skip(1); break;
                 case 4: skip(-1); break;
                 default: break;
@@ -176,6 +194,7 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
         release();
         if (!hasTrack()) return;
         MusicLibrary.Track track = queue.get(index);
+        if (guestOwnsPlayback) rememberGuestTrack(track.id);
         MediaPlayer candidate = new MediaPlayer();
         media = candidate;
         message = "Abriendo " + track;

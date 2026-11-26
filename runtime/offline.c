@@ -1097,6 +1097,32 @@ M(q_dealloc) { (void)m; rt_release(c, qs(SELF)->predicates); rt_objc_free(SELF);
 /* MPMediaItemCollection */
 static id cls_collection, cls_playlist, cls_media_item;
 typedef struct { id title, artist, album, track_id; } media_item_state;
+#ifdef __ANDROID__
+static id music_items;
+static pthread_mutex_t music_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* Stable objects survive switches among Songs, Artists and Playlists. */
+static id catalog_item(cpu_t *c, const char *fields[TRACK_FIELDS]) {
+    pthread_mutex_lock(&music_lock);
+    if (!music_items) music_items = rt_nsdict_new();
+    id key = rt_nsstring_new(fields[TRACK_ID]);
+    id item = rt_nsdict_get(music_items, key);
+    if (item) rt_retain(item);
+    else {
+        item = rt_objc_alloc(cls_media_item);
+        media_item_state *state = rt_objc_state(item, sizeof(media_item_state));
+        state->title = rt_nsstring_new(fields[TRACK_TITLE]);
+        state->artist = rt_nsstring_new(fields[TRACK_ARTIST]);
+        state->album = rt_nsstring_new(fields[TRACK_ALBUM]);
+        state->track_id = rt_retain(key);
+        if (rt_nsdict_count(music_items) < 2048) rt_nsdict_set(music_items, key, item);
+    }
+    rt_release(c, key);
+    pthread_mutex_unlock(&music_lock);
+    return item;
+}
+#endif
+
 typedef struct { id items, name; } coll_state;
 static coll_state *colls(id x) { return rt_objc_state(x, sizeof(coll_state)); }
 M(co_with_items) {
@@ -1170,12 +1196,7 @@ static id query_catalog(cpu_t *c, const query_state *query, int collections) {
             rt_release(c, key);
             if (duplicate) continue;
         }
-        id item = rt_objc_alloc(cls_media_item);
-        media_item_state *state = rt_objc_state(item, sizeof(media_item_state));
-        state->title = rt_nsstring_new(fields[TRACK_TITLE]);
-        state->artist = rt_nsstring_new(fields[TRACK_ARTIST]);
-        state->album = rt_nsstring_new(fields[TRACK_ALBUM]);
-        state->track_id = rt_nsstring_new(fields[TRACK_ID]);
+        id item = catalog_item(c, fields);
         id items = result;
         if (groups) {
             id key = rt_nsstring_new(fields[TRACK_GROUP]);
@@ -1210,10 +1231,9 @@ M(q_collections) { (void)m; RET(query_catalog(c, qs(SELF), 1)); }
 
 #ifdef __ANDROID__
 static id music_queue, music_selected;
-static char music_snapshot[40] = "0:";
+static char music_snapshot[40] = "0:", music_reported_id[38];
 static unsigned music_observers;
 static int music_selection_pending, music_requested;
-static pthread_mutex_t music_lock = PTHREAD_MUTEX_INITIALIZER;
 static int music_slot(id player) { return player == ipod_player ? 1 : 2; }
 
 static const char *music_item_id(id item) {
@@ -1270,7 +1290,10 @@ M(mu_set_item) {
     pthread_mutex_lock(&music_lock);
     set_retained(c, &music_selected, item);
     music_selection_pending = 1;
-    if (music_snapshot[0] == '1') music_start(music_item_id(item));
+    music_requested = 1;
+    const char *selected = music_item_id(item);
+    rt_platform_music_command(RT_MUSIC_SELECT, &selected, 1);
+    if (music_snapshot[0] == '1') music_start(selected);
     pthread_mutex_unlock(&music_lock);
 }
 M(mu_play) {
@@ -1283,7 +1306,14 @@ M(mu_play) {
     pthread_mutex_unlock(&music_lock);
 }
 M(mu_pause) { (void)m; (void)c; rt_platform_music_command(RT_MUSIC_PAUSE, NULL, 0); }
-M(mu_stop) { (void)m; (void)c; rt_platform_music_command(RT_MUSIC_STOP, NULL, 0); }
+M(mu_stop) {
+    (void)m;
+    pthread_mutex_lock(&music_lock);
+    set_retained(c, &music_selected, 0);
+    music_selection_pending = 0;
+    rt_platform_music_command(RT_MUSIC_STOP, NULL, 0);
+    pthread_mutex_unlock(&music_lock);
+}
 M(mu_next) { (void)m; (void)c; rt_platform_music_command(RT_MUSIC_NEXT, NULL, 0); }
 M(mu_prev) { (void)m; (void)c; rt_platform_music_command(RT_MUSIC_PREVIOUS, NULL, 0); }
 M(mu_state) {
@@ -1297,13 +1327,18 @@ M(mu_current) {
     (void)m;
     pthread_mutex_lock(&music_lock);
     const char *current = music_snapshot + 2;
-    id result = 0;
-    if (*current) {
+    id result = music_selection_pending ? music_selected : 0;
+    if (!result && *current) {
         for (uint32_t k = 0; k < rt_nsarray_count(music_queue); ++k) {
             id item = rt_nsarray_at(music_queue, k);
             if (!strcmp(current, music_item_id(item))) { result = item; break; }
         }
         if (!result && music_selected && !strcmp(current, music_item_id(music_selected))) result = music_selected;
+        if (!result && music_items) {
+            id key = rt_nsstring_new(current);
+            result = rt_nsdict_get(music_items, key);
+            rt_release(c, key);
+        }
     }
     RET(rt_autorelease(rt_retain(result)));
     pthread_mutex_unlock(&music_lock);
@@ -1325,7 +1360,7 @@ M(mu_unobserve) {
 void rt_offline_music_tick(cpu_t *c) {
     static double next;
     pthread_mutex_lock(&music_lock);
-    int requested = music_requested;
+    int requested = music_requested || music_observers;
     pthread_mutex_unlock(&music_lock);
     if (!requested) return;
     double now = rt_now();
@@ -1334,8 +1369,11 @@ void rt_offline_music_tick(cpu_t *c) {
     char state[40];
     rt_platform_music_state(state);
     pthread_mutex_lock(&music_lock);
-    int playback_changed = music_snapshot[0] != state[0], item_changed = strcmp(music_snapshot + 2, state + 2);
+    int playback_changed = music_snapshot[0] != state[0];
     memcpy(music_snapshot, state, strlen(state) + 1);
+    const char *visible = music_selection_pending && music_selected ? music_item_id(music_selected) : music_snapshot + 2;
+    int item_changed = strcmp(music_reported_id, visible) != 0;
+    snprintf(music_reported_id, sizeof music_reported_id, "%s", visible);
     unsigned observers = music_observers;
     pthread_mutex_unlock(&music_lock);
     for (int bit = 1; bit <= 2; bit *= 2) {
