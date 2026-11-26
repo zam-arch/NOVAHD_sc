@@ -83,6 +83,7 @@
 #include <pthread.h>
 #include <jni.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -119,6 +120,7 @@ static int buf_w = SCREEN_W, buf_h = SCREEN_H; /* the window buffers: the window
 static int win_w = SCREEN_W, win_h = SCREEN_H; /* the window in physical pixels (touch coordinates) */
 static int finger_ptr[MAX_FINGERS] = {-1, -1, -1, -1, -1}; /* Android pointer id held by each finger slot */
 static unsigned long long frames, swaps;
+static atomic_bool displayed;
 static EGLSurface idle_surf = EGL_NO_SURFACE; /* 1x1 pbuffer that keeps the context current without a window */
 static int surfaceless;                        /* EGL_KHR_surfaceless_context */
 static pthread_t main_thread;                  /* the android_main thread (the game's main thread) */
@@ -238,6 +240,19 @@ static void music_complete(JavaVM *vm, JNIEnv *env, int detach) {
     }
     (*env)->PopLocalFrame(env, NULL);
     if (detach) (*vm)->DetachCurrentThread(vm);
+}
+
+static void confirm_game_boot(void) {
+    JavaVM *vm;
+    int detach;
+    JNIEnv *env = music_environment(&vm, &detach);
+    if (!env) return;
+    jobject activity = app_state->activity->clazz;
+    jclass type = (*env)->GetObjectClass(env, activity);
+    jmethodID method = type ? (*env)->GetMethodID(env, type, "onNativeBootConfirmed", "()V") : NULL;
+    if (method) (*env)->CallVoidMethod(env, activity, method);
+    if (type) (*env)->DeleteLocalRef(env, type);
+    music_complete(vm, env, detach);
 }
 
 void rt_platform_music_command(int command, const char *const *ids, size_t count) {
@@ -695,6 +710,12 @@ Java_com_novahd_recomp_NativeWindowProbe_configureGraphics(JNIEnv *env, jclass c
     reference_frame = reference == JNI_TRUE;
 }
 
+JNIEXPORT void JNICALL
+Java_com_novahd_recomp_NativeWindowProbe_updateGraphics(JNIEnv *env, jclass cls, jboolean enabled, jint cull) {
+    (void)env; (void)cls;
+    rt_gl_configure_diagnostics(enabled, cull);
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_novahd_recomp_NativeWindowProbe_readGraphics(JNIEnv *env, jclass cls) {
     (void)cls;
@@ -780,9 +801,13 @@ void rt_platform_swap(void) {
             if (e == EGL_CONTEXT_LOST) context_lost();
             if (!logged++) rt_log("android: eglSwapBuffers failed (%#x)", e);
         }
+        else {
+            if (!atomic_load_explicit(&displayed, memory_order_relaxed))
+                atomic_store_explicit(&displayed, 1, memory_order_relaxed);
 #ifdef NOVA_FRAME_LOG
-        else log_swap_sample(target);
+            log_swap_sample(target);
 #endif
+        }
     }
     /* during the launch (before rt_platform_run) the activity's events are handled here, so the glue's UI thread does
      * not wait for the whole load. Only on the main thread: the looper, EGL current-ness and UIKit belong to it. Once
@@ -812,7 +837,7 @@ void rt_platform_run(cpu_t *c) {
     accel_enable(resumed);
     const double period = 1.0 / 60.0;
     double next = now_s();
-    int was_running = 0;
+    int was_running = 0, boot_confirmed = 0;
     for (;;) {
         /* everything pending first (even when frames run late), then wait for the next frame time, or for an event
          * while there is nothing to draw */
@@ -827,6 +852,10 @@ void rt_platform_run(cpu_t *c) {
             rt_log("android: frame %llu: game fault %u", frames, c->fault);
             rt_print_trace(c);
             exit(1);
+        }
+        if (!boot_confirmed && atomic_load_explicit(&displayed, memory_order_relaxed)) {
+            boot_confirmed = 1;
+            confirm_game_boot();
         }
         if (frames == 0) rt_log("android: first frame done");
         frames++;

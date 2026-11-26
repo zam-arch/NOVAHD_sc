@@ -9,6 +9,8 @@ public class GameActivity extends NativeActivity {
     static final String REFERENCE_FRAME = "reference_4_3";
     private GameDiagnosticsPanel diagnostics;
     private boolean resumed;
+    private boolean nativeTrace;
+    private android.widget.PopupWindow settingsButton;
     private android.view.SurfaceHolder gameSurface;
 
     @Override public void surfaceCreated(android.view.SurfaceHolder holder) {
@@ -39,11 +41,50 @@ public class GameActivity extends NativeActivity {
         
         android.content.SharedPreferences settings = getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE);
         boolean overlay = settings.getBoolean(GameDiagnosticsPanel.ENABLED, false);
-        boolean nativeTrace = BuildConfig.REBUILT_ENGINE
+        nativeTrace = BuildConfig.REBUILT_ENGINE
                 && NativeWindowProbe.configure(overlay, settings.getInt(GameDiagnosticsPanel.CULLING, 0),
                     settings.getBoolean(REFERENCE_FRAME, true));
         super.onCreate(savedInstanceState);
         if (overlay) diagnostics = new GameDiagnosticsPanel(this, nativeTrace);
+    }
+
+    public void onNativeBootConfirmed() {
+        runOnUiThread(() -> LauncherActivity.confirmBoot(this));
+    }
+
+    MusicPlayer music() { return ((RecoveryApplication) getApplication()).music(); }
+
+    void updateDiagnostics(boolean enabled, int cull) {
+        if (nativeTrace) NativeWindowProbe.updateGraphics(enabled, cull);
+        if (diagnostics != null) diagnostics.stop();
+        diagnostics = enabled ? new GameDiagnosticsPanel(this, nativeTrace) : null;
+        if (diagnostics != null && resumed && hasWindowFocus()) diagnostics.start();
+    }
+
+    private void showSettingsButton() {
+        if (settingsButton != null || !BuildConfig.REBUILT_ENGINE) return;
+        android.widget.Button button = new android.widget.Button(this);
+        button.setText("⚙");
+        button.setContentDescription("Configuración avanzada");
+        button.setMinWidth(0);
+        button.setMinimumWidth(0);
+        button.setPadding(0, 0, 0, 0);
+        button.setAlpha(0.85f);
+        button.setOnClickListener(view -> new GameSettings(this).show());
+        int size = Math.round(48 * getResources().getDisplayMetrics().density);
+        settingsButton = new android.widget.PopupWindow(button, size, size, false);
+        settingsButton.setInputMethodMode(android.widget.PopupWindow.INPUT_METHOD_NOT_NEEDED);
+        View anchor = getWindow().getDecorView();
+        try {
+            settingsButton.showAtLocation(anchor, android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL, 0, 0);
+        } catch (android.view.WindowManager.BadTokenException ignored) {
+            hideSettingsButton();
+        }
+    }
+
+    private void hideSettingsButton() {
+        if (settingsButton != null) settingsButton.dismiss();
+        settingsButton = null;
     }
 
     // Called on the engine thread. Only the synchronized catalog is accessed here.
@@ -68,11 +109,16 @@ public class GameActivity extends NativeActivity {
     @Override protected void onResume() {
         super.onResume();
         resumed = true;
-        if (diagnostics != null && hasWindowFocus()) diagnostics.start();
+        if (hasWindowFocus()) {
+            showSettingsButton();
+            if (diagnostics != null) diagnostics.start();
+        }
     }
 
     @Override protected void onPause() {
         resumed = false;
+        hideSettingsButton();
+        if (isFinishing()) music().stop();
         if (diagnostics != null) diagnostics.stop();
         super.onPause();
     }
@@ -90,7 +136,9 @@ public class GameActivity extends NativeActivity {
             if (hasFocus && resumed) diagnostics.start();
             else diagnostics.stop();
         }
+        if (!hasFocus) hideSettingsButton();
         if (hasFocus) {
+            if (resumed) showSettingsButton();
             View decorView = getWindow().getDecorView();
             decorView.setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY

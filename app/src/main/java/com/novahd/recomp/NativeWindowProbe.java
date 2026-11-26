@@ -36,6 +36,7 @@ final class NativeWindowProbe {
     }
 
     static native String readGraphics();
+    static native void updateGraphics(boolean trace, int culling);
     private static native void configureGraphics(boolean trace, int culling, boolean reference);
     private static native String sample(Surface surface);
 }
