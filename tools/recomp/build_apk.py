@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import json
 import os
 import shutil
 import subprocess
@@ -32,6 +33,7 @@ import time
 import zipfile
 from pathlib import Path
 
+from compile_plan import compile_plan
 from relink_inputs import digest, export, restore
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -184,22 +186,13 @@ def main():
                 newest_obj[k] = o
         objs = sorted(newest_obj.values())
     else:
-        # the translated code, as for the Windows runner (variant "runtime": rc_import/rc_hostcall come from runtime/)
-        from difftest import compile_objects
-        from lift import Lifter, Unsupported, entries
-        from macho import Image
-
-        image = Image(args.exe)
-        ents = entries(image)
-        lifter = Lifter(image, ents)
-        sources = {}
-        for a, f in ents.items():
-            try:
-                sources[a] = lifter.lift(f)
-            except Unsupported:
-                pass
-        print(f"Translation: {len(sources)}/{len(ents)} entries lifted, {len(ents) - len(sources)} stubs", flush=True)
-        objs = compile_objects(image, ents, sources, work, target=(triple, opt, "unused", [clang]), variant="runtime")
+        # Emit the lift in its own process so Clang starts with its memory released.
+        generated = run([sys.executable, ROOT / "tools/recomp/emit_android_translation.py",
+                         args.exe, work.resolve(), clang, triple, *opt])
+        report = json.loads(generated.stdout)
+        print(f"Translation: {report['lifted']}/{report['entries']} entries lifted, "
+              f"{report['entries'] - report['lifted']} stubs", flush=True)
+        objs = compile_plan(report["commands"], min(2, os.cpu_count() or 1), progress=True)
     if args.export_relink_inputs:
         export(args.export_relink_inputs, objs, out, triple, args.checked, ndk.name)
     print(f"translated code: {len(objs)} objects, {time.time() - t0:.0f}s")

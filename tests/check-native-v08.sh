@@ -12,7 +12,15 @@ cc -std=gnu11 -ffunction-sections -fdata-sections -Iruntime -Itools/recomp/runti
 "$scratch/fbo"
 ndk=28.2.13676358
 bin="$ANDROID_HOME/ndk/$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
-"$bin/aarch64-linux-android26-clang" -fPIC -Itools/recomp/runtime -c tests/native_dispatch_fixture.c -o "$scratch/shard.o"
+PYTHONPATH=tools/recomp python3 - "$bin/aarch64-linux-android26-clang" "$scratch/shard.o" <<'PYTEST'
+import sys
+from pathlib import Path
+from compile_plan import compile_plan
+clang, obj = sys.argv[1:]
+command = [clang, "-fPIC", "-Itools/recomp/runtime", "-c", "tests/native_dispatch_fixture.c", "-o", obj]
+assert compile_plan([command], 2) == [Path(obj)]
+assert compile_plan([["unavailable-compiler", "-o", obj]], 2) == [Path(obj)]
+PYTEST
 cp tests/native_relink_fixture.c "$scratch/image_meta.c"
 printf 'test' > "$scratch/image.bin"
 PYTHONPATH=tools/recomp python3 - "$scratch" "$ndk" <<'PY'

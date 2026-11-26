@@ -14,7 +14,7 @@ La base de esta rama es `7330885`. En el POCO F8 Pro con Android 17, Adreno 830 
 | Metadatos | SHA-256 de `image_meta.c` `87a042f65b876d99b24e0c534f01a6911df72f16b8f72f94e987f31ca1afcb13`. 484 imports, 5.578 palabras enlazadas, 46 constructores, `main=0x63f0`, 21.230 entradas de despacho |
 | Campaña | 44 archivos con tamaños y SHA-256 idénticos a `campaign.tsv` |
 
-`macho.py`, `lift.py`, `pack_image.py` y `difftest.py` coinciden con `930cd60`. La comparación con la 0.4 verifica bytes de la imagen invitada y no presupone un ELF idéntico. El procedimiento usa NDK 28.2.13676358 y destino aarch64-linux-android26.
+`macho.py`, `lift.py` y `pack_image.py` coinciden con `930cd60`. La generación de C de `difftest.py` mantiene el traductor y sus flags. Se separaron la emisión y la compilación después de que el límite de 8 GiB terminara el primer proceso por falta de memoria. La comparación con la 0.4 verifica bytes de la imagen invitada y no presupone un ELF idéntico. El procedimiento usa NDK 28.2.13676358 y destino aarch64-linux-android26.
 
 ## Reproducción privada
 

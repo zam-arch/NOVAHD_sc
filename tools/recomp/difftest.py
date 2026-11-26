@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import argparse
 import re
-import concurrent.futures
+from compile_plan import compile_plan
 import csv
 import ctypes
 import hashlib
@@ -171,7 +171,7 @@ HOSTFN_BASE, HOSTFN_MAX = 0x00E00000, 0x10000  # runtime/rt.h: RT_HOSTFN_BASE, R
 
 
 def compile_objects(image: Image, ents: dict, sources: dict, workdir: Path, mutate=None, target=X86_TEST,
-                    variant="test") -> list:
+                    variant="test", *, emit_only=False) -> list:
     """Compile every entry (translated, or a stub that faults) plus the dispatcher. Object files are cached by
     content, so a rebuild recompiles only the shards that changed. The x86 test build is checked (bounds, budget);
     the arm64 build is the optimized one. variant "test" adds the comparison harness's glue (an import handler
@@ -232,19 +232,18 @@ def compile_objects(image: Image, ents: dict, sources: dict, workdir: Path, muta
              f"-I{RUNTIME}", f"-I{workdir}"]
     key_extra = (RUNTIME / "recomp.h").read_text() + protos + " ".join(flags)
 
-    def compile_one(item):
-        path, text = item
+    plan = []
+    for path, text in files:
         digest = hashlib.sha256((text + key_extra).encode()).hexdigest()[:16]
         obj = path.with_suffix(f".{digest}.o")
-        if not obj.exists():
+        if not obj.exists() or not path.exists():
             path.write_text(text, encoding="utf-8")
-            r = subprocess.run([*compiler, "-c", *flags, str(path), "-o", str(obj)], capture_output=True, text=True)
-            if r.returncode:
-                raise RuntimeError(f"compile of {path.name} failed:\n{r.stderr[-4000:]}")
-        return obj
+        plan.append((path, obj))
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as pool:
-        return list(pool.map(compile_one, files))
+    if emit_only:
+        return [[str(item) for item in (*compiler, "-c", *flags, src, "-o", obj)] for src, obj in plan]
+    return compile_plan([[str(item) for item in (*compiler, "-c", *flags, src, "-o", obj)]
+                         for src, obj in plan], os.cpu_count() or 4)
 
 
 def build(image: Image, ents: dict, sources: dict, workdir: Path, mutate=None, target=X86_TEST) -> Path:
