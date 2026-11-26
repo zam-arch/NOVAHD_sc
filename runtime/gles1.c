@@ -485,7 +485,7 @@ static void present_blit(void) {
     uint8_t cap_on[NCAPS];
     for (int k = 0; k < NCAPS; k++) cap_on[k] = *cap_slot(caps[k]);
     I vpt[4] = {0}, scb[4] = {0}, old_tex[2] = {0, 0}, old_active = 0, old_client = 0, old_mm = 0, old_env[2] = {0, 0};
-    float mv[16], pj[16], tx[16], color[4];
+    float mv[16], pj[16], tx[16], color[4], clear_color[4];
     uint8_t cmask[4], tex_on[2], tcarr_on[2];
     gi(0x0BA2 /* VIEWPORT */, vpt);
     gi(0x0C10 /* SCISSOR_BOX */, scb);
@@ -495,6 +495,7 @@ static void present_blit(void) {
     gfv(0x0BA6 /* MODELVIEW_MATRIX */, mv);
     gfv(0x0BA7 /* PROJECTION_MATRIX */, pj);
     gfv(0x0B00 /* CURRENT_COLOR */, color);
+    gfv(0x0C22 /* COLOR_CLEAR_VALUE */, clear_color);
     gbv(0x0C23 /* COLOR_WRITEMASK */, cmask);
     for (int u = 0; u < 2; u++) {
         at(0x84C0 + u);
@@ -564,14 +565,14 @@ static void present_blit(void) {
         (tcarr_on[u] ? ecs : dcs)(0x8078);
     }
     mm(0x1702); lm(tx);
-    sh_proj_for_gl(pj);
     mm(0x1701); lm(pj);
-    mm(0x1700); lm(sh_mv[sh_mv_sp]);
+    mm(0x1700); lm(mv);
     mm((E)old_mm);
     at((E)old_active);
     cat((E)old_client);
     cm(cmask[0], cmask[1], cmask[2], cmask[3]);
     c4(color[0], color[1], color[2], color[3]);
+    cc(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
     for (int k = 0; k < NCAPS; k++) (cap_on[k] ? en : di)(caps[k]);
     vp(vpt[0], vpt[1], vpt[2], vpt[3]);
     sc(scb[0], scb[1], scb[2], scb[3]);
