@@ -52,10 +52,11 @@ public final class LauncherActivity extends Activity {
         @Override public void run() {
             if (campaign.busy) {
                 handler.postDelayed(this, 100);
-            } else if (campaign.ready && startGame(LauncherActivity.this)) {
+            } else if (campaign.ready) {
+                startActivity(new Intent(LauncherActivity.this, GameActivity.class));
                 finish();
             } else {
-                recover(campaign.ready, 0);
+                recover(false, 0);
             }
         }
     };
@@ -76,11 +77,9 @@ public final class LauncherActivity extends Activity {
         return R.string.game_runtime_missing_message;
     }
 
-    static boolean startGame(Activity activity) {
-        if (BuildConfig.REBUILT_ENGINE && !activity.getSharedPreferences(PREFS, MODE_PRIVATE)
-                .edit().putBoolean(BOOT_FAILED, true).commit()) return false;
-        activity.startActivity(new Intent(activity, GameActivity.class));
-        return true;
+    static void recordBootAttempt(Context context) {
+        if (!context.getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(BOOT_FAILED, true).commit())
+            android.util.Log.w("NOVAHD", "Could not persist the native startup attempt");
     }
 
     static void confirmBoot(Context context) {

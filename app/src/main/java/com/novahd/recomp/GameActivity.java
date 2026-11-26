@@ -44,6 +44,7 @@ public class GameActivity extends NativeActivity {
         nativeTrace = BuildConfig.REBUILT_ENGINE
                 && NativeWindowProbe.configure(overlay, settings.getInt(GameDiagnosticsPanel.CULLING, 0),
                     settings.getBoolean(REFERENCE_FRAME, true));
+        if (BuildConfig.REBUILT_ENGINE) LauncherActivity.recordBootAttempt(this);
         super.onCreate(savedInstanceState);
         if (overlay) diagnostics = new GameDiagnosticsPanel(this, nativeTrace);
     }

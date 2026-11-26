@@ -125,11 +125,7 @@ public final class ResourceManagerActivity extends AppCompatActivity {
                     .setPositiveButton(android.R.string.ok, null).show();
             return false;
         }
-        if (!LauncherActivity.startGame(this)) {
-            new MaterialAlertDialogBuilder(this).setMessage(R.string.launch_failed)
-                    .setPositiveButton(android.R.string.ok, null).show();
-            return false;
-        }
+        startActivity(new Intent(this, GameActivity.class));
         finish();
         return true;
     }
