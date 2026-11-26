@@ -8,6 +8,22 @@ import android.view.View;
 public class GameActivity extends NativeActivity {
     private GameDiagnosticsPanel diagnostics;
     private boolean resumed;
+    private android.view.SurfaceHolder gameSurface;
+
+    @Override public void surfaceCreated(android.view.SurfaceHolder holder) {
+        super.surfaceCreated(holder);
+        gameSurface = holder;
+    }
+
+    @Override public void surfaceDestroyed(android.view.SurfaceHolder holder) {
+        gameSurface = null;
+        super.surfaceDestroyed(holder);
+    }
+
+    String sampleNativeWindow() {
+        return NativeWindowProbe.describe(gameSurface == null ? null : gameSurface.getSurface());
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // Hide system bars for immersive gameplay

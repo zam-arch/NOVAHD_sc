@@ -1,6 +1,5 @@
 package com.novahd.recomp;
 
-import android.app.Activity;
 import android.graphics.Color;
 import android.os.Debug;
 import android.os.Handler;
@@ -17,12 +16,12 @@ import com.novahd.compat.DeviceMemory;
 final class GameDiagnosticsPanel {
     static final String PREFS = "game_diagnostics";
     static final String ENABLED = "enabled";
-    private final Activity activity;
+    private final GameActivity activity;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private PopupWindow popup;
     private TextView text;
 
-    GameDiagnosticsPanel(Activity activity) { this.activity = activity; }
+    GameDiagnosticsPanel(GameActivity activity) { this.activity = activity; }
 
     void start() {
         if (popup != null) return;
@@ -61,6 +60,7 @@ final class GameDiagnosticsPanel {
             long pss = Debug.getPss();
             text.setText(activity.getString(R.string.graphics_overlay_summary,
                     mode.getPhysicalWidth(), mode.getPhysicalHeight(), pss, DeviceMemory.pageBytes()));
+            if (BuildConfig.WINDOW_PROBE) text.append("\n" + activity.sampleNativeWindow());
             handler.postDelayed(this, 1000);
         }
     };

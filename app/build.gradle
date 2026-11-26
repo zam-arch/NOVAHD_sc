@@ -7,6 +7,10 @@ def nativeInput = layout.projectDirectory.dir(
     providers.gradleProperty("novaNativeDir").getOrElse("../build/recovery/android"))
 def officialEngine = providers.gradleProperty("novaOfficialEngine").orElse("false").get().toBoolean()
 def nativeRecovery = providers.gradleProperty("novaNativeRecovery").orElse("false").get().toBoolean()
+def windowProbe = providers.gradleProperty("novaWindowProbe").orElse("false").get().toBoolean()
+if (windowProbe && (!officialEngine || nativeRecovery)) {
+    throw new GradleException("The 0.8.2 probe requires the official 4 KiB engine.")
+}
 def recoveryKeystore = providers.environmentVariable("NOVA_SIGNING_KEYSTORE").orNull
 
 android {
@@ -18,13 +22,19 @@ android {
         applicationId "com.novahd.recomp"
         minSdk 26
         targetSdk 34
-        versionCode(nativeRecovery ? 8 : 7)
-        versionName(nativeRecovery ? "0.8.1-recovery" : (officialEngine ? "0.7-recovery-arm64-4k" : "0.7-recovery"))
+        versionCode(windowProbe ? 9 : (nativeRecovery ? 8 : 7))
+        versionName(windowProbe ? "0.8.2-probe-arm64-4k" : nativeRecovery ? "0.8.1-recovery" : (officialEngine ? "0.7-recovery-arm64-4k" : "0.7-recovery"))
         buildConfigField "boolean", "OFFICIAL_ENGINE", officialEngine.toString()
         
+        buildConfigField "boolean", "WINDOW_PROBE", windowProbe.toString()
+
         ndk {
             abiFilters "arm64-v8a"
         }
+    }
+
+    if (windowProbe) {
+        externalNativeBuild.ndkBuild.path = file("src/extension/Android.mk")
     }
 
     if (recoveryKeystore) {

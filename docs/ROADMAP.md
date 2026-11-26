@@ -7,9 +7,10 @@
 | Recovery 0.7 | Música personalizada local y sonda D24S8 → D16. Validar en POCO antes de intervenir en el nativo. |
 | Runtime 0.8 | Corrección fuente de FBO y memoria, telemetría opt-in y relink probado con entradas sintéticas. Conseguir objetos/metadatos legítimos o Mach-O y validar en el POCO. |
 | Entradas de enlace 0.8.1 | Auditoría upstream sin bundle recuperable. Importador privado por IPA y rechazo de ELF enlazado. Conseguir objetos/metadatos autorizados o Mach-O compatible antes de empaquetar. |
+| Extensión 0.8.2 | Sonda JNI opcional de ventana y exportaciones. Reemplazo de selector demostrado en fixture Linux. Validar la sonda en campaña en el POCO. [Informe](RECOVERY-v0.8.2.md) |
 | Estabilidad gráfica | Reproducir por escena y aislar texturas, geometría, transparencia o profundidad. Probar el fallback D16 y la restauración de estados. Corregir solo lo demostrado y validar campaña y arranque. |
 | Panorámica y resolución | Validar 4:3, 16:9, 20:9 y superiores con FOV, HUD y toque coherentes. Evaluar Original, HD y Nativa tras relink del motor y pruebas de memoria. |
-| Música integrada | Con acceso al runtime, estudiar pestañas iOS, canales, atenuación con diálogo y estados de música dinámica. |
+| Música integrada | Restaurar listas, artistas y canciones en las pestañas originales con biblioteca local y controles originales. Banda sonora predeterminada. La música dinámica queda fuera del objetivo vigente. |
 | Telemetría del motor y 16 KiB | Obtener fuentes/objetos traducidos compatibles o IPA legítimo. Instrumentar presentación y errores sin alterar estados. Corregir la memoria host preservando la guardia nula. Probar 4 y 16 KiB con Android real. |
 | Multijugador LAN | Eco UDP aislado verificado en loopback. Tras aprobación y validación entre dispositivos propios, reconstruir el contrato Darwin/Bonjour, lobby y sesión, con dos dispositivos de prueba y paquetes de referencia controlados. |
 | Multijugador P2P | Tras estabilidad LAN, evaluar servidor de señalización, salas privadas, ICE/STUN/TURN, seguridad, relay, autoridad y sincronización. Mantener compatibilidad de protocolo bajo pruebas. |

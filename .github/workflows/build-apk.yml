@@ -2,7 +2,7 @@ name: Build N.O.V.A. HD APK (ARM64)
 
 on:
   push:
-    branches: [development, recovery/v0.5, recovery/prebuilt-arm64, recovery/v0.6, recovery/v0.7, recovery/v0.8, recovery/v0.8.1]
+    branches: [development, recovery/v0.5, recovery/prebuilt-arm64, recovery/v0.6, recovery/v0.7, recovery/v0.8, recovery/v0.8.1, recovery/v0.8.2]
   pull_request:
     branches: [development]
   workflow_dispatch:
@@ -55,6 +55,11 @@ jobs:
 
       - name: Check IPA preflight and native interposition boundaries
         run: bash tests/check-recovery-v081.sh
+
+      - name: Test the selector extension and JNI window probe
+        run: |
+          bash tests/check-extension-v082.sh
+          gradle :app:externalNativeBuildRelease --no-daemon -PnovaWindowProbe=true -PnovaOfficialEngine=true
 
       - name: Ensure Gradle refuses an incomplete APK
         run: |
