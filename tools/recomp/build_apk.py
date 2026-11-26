@@ -32,10 +32,7 @@ import time
 import zipfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-from difftest import compile_objects  # noqa: E402
-from lift import Lifter, Unsupported, entries  # noqa: E402
-from macho import Image  # noqa: E402
+from relink_inputs import export, restore
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = "com.novahd.recomp"
@@ -122,7 +119,11 @@ def run(cmd, **kw):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--exe", type=Path, required=True, help="the original NovaHD executable (Mach-O)")
+    inputs = ap.add_mutually_exclusive_group(required=True)
+    inputs.add_argument("--exe", type=Path, help="the original NovaHD executable (Mach-O)")
+    inputs.add_argument("--relink-inputs", type=Path, help="private bundle exported from a matching Android build")
+    ap.add_argument("--export-relink-inputs", type=Path, help="save exact translated objects and image metadata")
+    ap.add_argument("--frame-log", action="store_true", help="log native swap timing and resolutions")
     ap.add_argument("--out", type=Path, default=Path("build/apk"))
     ap.add_argument("--checked", action="store_true", help="RECOMP_CHECKED translated code and runtime")
     ap.add_argument("--bundle", type=Path, help="pack this NovaHD.app folder into the APK (extracted on first run)")
@@ -135,12 +136,14 @@ def main():
     ap.add_argument("--install", action="store_true", help="adb install -r the APK afterwards")
     ap.add_argument("--push", type=Path, help="adb push this NovaHD.app folder to the app's files folder")
     args = ap.parse_args()
+    if args.runtime_only and (args.relink_inputs or args.export_relink_inputs):
+        ap.error("--runtime-only is the legacy cache mode and cannot be combined with relink bundles")
     t0 = time.time()
     sdk = sdk_root()
     ndk = sdk / "ndk" / args.ndk_version if args.ndk_version else newest(sdk / "ndk")
     if not ndk.is_dir():
         ap.error(f"NDK not installed: {ndk}")
-    if not args.exe.is_file():
+    if args.exe and not args.exe.is_file():
         ap.error("the original iPad NovaHD Mach-O is required")
     bt = newest(sdk / "build-tools")
     android_jar = newest(sdk / "platforms") / "android.jar"
@@ -152,11 +155,17 @@ def main():
 
     out = args.out
     out.mkdir(parents=True, exist_ok=True)
-    run([sys.executable, ROOT / "tools/recomp/pack_image.py", "--exe", args.exe, "--out", out])
+    if args.exe:
+        run([sys.executable, ROOT / "tools/recomp/pack_image.py", "--exe", args.exe, "--out", out])
 
     opt = ["-O1", "-fPIC", "-g0", "-DRECOMP_CHECKED"] if args.checked else ["-O2", "-fPIC", "-g0"]
     work = Path("build/recomp-android" + ("-checked" if args.checked else ""))
-    if args.runtime_only:
+    if args.relink_inputs:
+        try:
+            objs = restore(args.relink_inputs, out, triple, args.checked, ndk.name)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            ap.error(f"Cannot relink: {error}")
+    elif args.runtime_only:
         newest_obj = {}  # one object per source: names carry a content hash, older ones stay behind
         for o in work.glob("*.o"):
             k = o.name.split(".")[0]
@@ -165,6 +174,10 @@ def main():
         objs = sorted(newest_obj.values())
     else:
         # the translated code, as for the Windows runner (variant "runtime": rc_import/rc_hostcall come from runtime/)
+        from difftest import compile_objects
+        from lift import Lifter, Unsupported, entries
+        from macho import Image
+
         image = Image(args.exe)
         ents = entries(image)
         lifter = Lifter(image, ents)
@@ -175,12 +188,16 @@ def main():
             except Unsupported:
                 pass
         objs = compile_objects(image, ents, sources, work, target=(triple, opt, "unused", [clang]), variant="runtime")
+    if args.export_relink_inputs:
+        export(args.export_relink_inputs, objs, out, triple, args.checked, ndk.name)
     print(f"translated code: {len(objs)} objects, {time.time() - t0:.0f}s")
 
     # the runtime, the glue, image_meta.c
     glue = ndk / "sources/android/native_app_glue"
     flags = ["-target", triple, "-O2", "-fPIC", "-g", "-Wall", "-Wno-unused-parameter", f"-I{ROOT / 'runtime'}",
              f"-I{ROOT / 'tools/recomp/runtime'}", f"-I{glue}"] + (["-DRECOMP_CHECKED"] if args.checked else [])
+    if args.frame_log:
+        flags.append("-DNOVA_FRAME_LOG")
     if args.native_only:
         flags.append("-DNOVA_MANAGED_BUNDLE")
     rt_dir = out / ("obj-checked" if args.checked else "obj")

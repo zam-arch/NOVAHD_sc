@@ -2,7 +2,7 @@ name: Build N.O.V.A. HD APK (ARM64)
 
 on:
   push:
-    branches: [development, recovery/v0.5, recovery/prebuilt-arm64, recovery/v0.6, recovery/v0.7]
+    branches: [development, recovery/v0.5, recovery/prebuilt-arm64, recovery/v0.6, recovery/v0.7, recovery/v0.8]
   pull_request:
     branches: [development]
   workflow_dispatch:
@@ -49,6 +49,9 @@ jobs:
 
       - name: Check ARM64 runtime sources
         run: bash tools/recomp/check_android_runtime.sh "$ANDROID_HOME/ndk/$NDK_VERSION"
+
+      - name: Test native memory, framebuffer and relink contract
+        run: bash tests/check-native-v08.sh
 
       - name: Ensure Gradle refuses an incomplete APK
         run: |

@@ -549,6 +549,37 @@ static void render_sync(void) {
     pthread_mutex_unlock(&gl_mx);
 }
 
+#ifdef NOVA_FRAME_LOG
+/* Timings at successful eglSwapBuffers return. This is submission cadence, not display presentation. */
+static void log_swap_sample(EGLSurface target) {
+    static _Thread_local uint64_t previous, start, frames_in_window;
+    static _Thread_local EGLSurface previous_target;
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts)) return;
+    uint64_t now = (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
+    if (!start || !previous || now - previous > UINT64_C(1000000000) || target != previous_target) {
+        start = previous = now;
+        previous_target = target;
+        frames_in_window = 0;
+        return;
+    }
+    frames_in_window++;
+    if (now - start >= UINT64_C(1000000000)) {
+        EGLint w, h;
+        int rw, rh;
+        rt_gl_measure_render(&rw, &rh);
+        char render[40] = "unavailable";
+        if (rw > 0 && rh > 0) snprintf(render, sizeof render, "%dx%d", rw, rh);
+        if (eglQuerySurface(dpy, target, EGL_WIDTH, &w) && eglQuerySurface(dpy, target, EGL_HEIGHT, &h))
+            rt_log("frame: %.2f swaps/s, last %.2f ms, render %s, EGL %dx%d",
+                   1e9 * frames_in_window / (now - start), (now - previous) / 1e6, render, w, h);
+        start = now;
+        frames_in_window = 0;
+    }
+    previous = now;
+}
+#endif
+
 void rt_platform_swap(void) {
     EGLSurface target = surf;
     if (handed_over) { /* only the thread that has the context swaps; never on the idle pbuffer */
@@ -563,6 +594,9 @@ void rt_platform_swap(void) {
             if (e == EGL_CONTEXT_LOST) context_lost();
             if (!logged++) rt_log("android: eglSwapBuffers failed (%#x)", e);
         }
+#ifdef NOVA_FRAME_LOG
+        else log_swap_sample(target);
+#endif
     }
     /* during the launch (before rt_platform_run) the activity's events are handled here, so the glue's UI thread does
      * not wait for the whole load. Only on the main thread: the looper, EGL current-ness and UIKit belong to it. Once

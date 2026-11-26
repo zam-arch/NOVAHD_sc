@@ -361,6 +361,22 @@ static int hud_seen, hud_on, hud_gone;
 static int present_w, present_h;
 static int present_failed;
 
+/* Shared by creation and resize. D16 cannot retain a stencil attachment. */
+static E present_depth(T_glRenderbufferStorageOES storage, T_glFramebufferRenderbufferOES attach,
+                       T_glCheckFramebufferStatusOES check, I width, I height) {
+    storage(GL_RENDERBUFFER_OES, 0x88F0 /* DEPTH24_STENCIL8_OES */, width, height);
+    attach(0x8D40, 0x8D00 /* DEPTH_ATTACHMENT */, GL_RENDERBUFFER_OES, present_ds);
+    attach(0x8D40, 0x8D20 /* STENCIL_ATTACHMENT */, GL_RENDERBUFFER_OES, present_ds);
+    E status = check(0x8D40);
+    if (status != GL_FRAMEBUFFER_COMPLETE_OES) {
+        rt_log("gl: packed depth/stencil framebuffer incomplete (%#x); trying D16", status);
+        attach(0x8D40, 0x8D20, GL_RENDERBUFFER_OES, 0);
+        storage(GL_RENDERBUFFER_OES, 0x81A5 /* DEPTH_COMPONENT16 */, width, height);
+        status = check(0x8D40);
+    }
+    return status;
+}
+
 static void present_setup(void) {
     if (present_fbo || present_failed || !drawable_w || !drawable_h || !rt_gl_getproc) return;
     T_glGenFramebuffersOES gf = F(glGenFramebuffersOES);
@@ -396,16 +412,7 @@ static void present_setup(void) {
     ft(0x8D40, GL_COLOR_ATTACHMENT0_OES, 0x0DE1, present_tex, 0);
     gr(1, &present_ds);
     br(GL_RENDERBUFFER_OES, present_ds);
-    rs(GL_RENDERBUFFER_OES, 0x88F0 /* DEPTH24_STENCIL8_OES */, present_w, present_h);
-    fr(0x8D40, 0x8D00 /* DEPTH_ATTACHMENT */, GL_RENDERBUFFER_OES, present_ds);
-    fr(0x8D40, 0x8D20 /* STENCIL_ATTACHMENT */, GL_RENDERBUFFER_OES, present_ds);
-    E st = cs(0x8D40);
-    if (st != GL_FRAMEBUFFER_COMPLETE_OES) {
-        rt_log("gl: packed depth/stencil framebuffer incomplete (%#x); trying a plain depth buffer", st);
-        rs(GL_RENDERBUFFER_OES, 0x81A5 /* DEPTH_COMPONENT16 */, present_w, present_h);
-        fr(0x8D40, 0x8D20, GL_RENDERBUFFER_OES, 0);
-        st = cs(0x8D40);
-    }
+    E st = present_depth(rs, fr, cs, present_w, present_h);
     if (st != GL_FRAMEBUFFER_COMPLETE_OES) {
         rt_log("gl: the presentation framebuffer is incomplete (%#x): drawing straight into the window", st);
         present_failed = 1;
@@ -592,7 +599,8 @@ static void present_resize(void) {
     T_glRenderbufferStorageOES rs = F(glRenderbufferStorageOES);
     T_glCheckFramebufferStatusOES cs = F(glCheckFramebufferStatusOES);
     T_glBindFramebufferOES bf = F(glBindFramebufferOES);
-    if (!present_fbo || !drawable_h || want == present_h || !gi || !bt || !ti || !br || !rs || !cs || !bf) return;
+    T_glFramebufferRenderbufferOES fr = F(glFramebufferRenderbufferOES);
+    if (!fr || !present_fbo || !drawable_h || want == present_h || !gi || !bt || !ti || !br || !rs || !cs || !bf) return;
     I old_tex = 0, old_rb = 0;
     gi(0x8069, &old_tex);
     gi(GL_RENDERBUFFER_BINDING_OES, &old_rb);
@@ -600,8 +608,18 @@ static void present_resize(void) {
     ti(0x0DE1, 0, 0x1908, present_w, want, 0, 0x1908, 0x1401, NULL);
     br(GL_RENDERBUFFER_OES, present_ds);
     bf(0x8D40, present_fbo);
-    rs(GL_RENDERBUFFER_OES, 0x88F0, present_w, want);
-    if (cs(0x8D40) != GL_FRAMEBUFFER_COMPLETE_OES) rs(GL_RENDERBUFFER_OES, 0x81A5, present_w, want);
+    E status = present_depth(rs, fr, cs, present_w, want);
+    if (status != GL_FRAMEBUFFER_COMPLETE_OES) {
+        rt_log("gl: presentation resize failed (%#x); attempting previous size", status);
+        ti(0x0DE1, 0, 0x1908, present_w, present_h, 0, 0x1908, 0x1401, NULL);
+        status = present_depth(rs, fr, cs, present_w, present_h);
+        if (status != GL_FRAMEBUFFER_COMPLETE_OES) {
+            rt_log("gl: presentation framebuffer unrecoverable (%#x)", status);
+            present_failed = 1;
+            present_fbo = 0;
+        }
+        want = present_h;
+    }
     bf(0x8D40, host_fb(bound_fb));
     bt(0x0DE1, (uint32_t)old_tex);
     br(GL_RENDERBUFFER_OES, (uint32_t)old_rb);
@@ -614,6 +632,13 @@ static void present_resize(void) {
     T_glLoadMatrixf lm = F(glLoadMatrixf);
     if (proj_scaled && mm && lm) { float m[16]; sh_proj_for_gl(m); mm(0x1701); lm(m); mm((E)mat_mode); }
 }
+
+#ifdef NOVA_FRAME_LOG
+void rt_gl_measure_render(int *width, int *height) {
+    *width = present_fbo ? present_w : 0;
+    *height = present_fbo ? present_h : 0;
+}
+#endif
 
 void rt_gl_present(void) {
     if (present_fbo) { present_blit(); present_resize(); } /* the blit swaps */

@@ -9,18 +9,26 @@
 #include <windows.h>
 #else
 #include <sys/mman.h>
+#include <unistd.h>
+#include "host_pages.h"
+static size_t host_page_size;
 #endif
 
 uint8_t *rt_mem;
 
 void rt_commit(uint32_t addr, uint32_t size) {
-    uint32_t start = addr & ~0xFFFu, end = (addr + size + 0xFFFu) & ~0xFFFu; /* pages: __PAGEZERO must stay unmapped */
+    if (!size) return;
 #ifdef _WIN32
-    if (!VirtualAlloc(rt_mem + start, end - start, MEM_COMMIT, PAGE_READWRITE))
-        rt_fatal("commit %#x+%#x failed", start, end - start);
+    uint64_t end = ((uint64_t)addr + size + 0xfff) & ~UINT64_C(0xfff);
+    uint32_t start = addr & ~0xfffu;
+    if (addr < 0x1000 || end > (UINT64_C(1) << 32)
+            || !VirtualAlloc(rt_mem + start, end - start, MEM_COMMIT, PAGE_READWRITE))
+        rt_fatal("commit %#x+%#x failed", addr, size);
 #else
-    if (mprotect(rt_mem + start, end - start, PROT_READ | PROT_WRITE))
-        rt_fatal("commit %#x+%#x failed", start, end - start);
+    uintptr_t start, end;
+    if (!rt_host_page_range((uintptr_t)rt_mem, host_page_size, addr, size, &start, &end)
+            || mprotect((void *)start, end - start, PROT_READ | PROT_WRITE))
+        rt_fatal("commit %#x+%#x failed (host page %zu)", addr, size, host_page_size);
 #endif
 }
 
@@ -28,8 +36,13 @@ static void reserve(void) {
 #ifdef _WIN32
     rt_mem = VirtualAlloc(NULL, 1ull << 32, MEM_RESERVE, PAGE_NOACCESS);
 #else
-    rt_mem = mmap(NULL, 1ull << 32, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
-    if (rt_mem == MAP_FAILED) rt_mem = NULL;
+    long page = sysconf(_SC_PAGESIZE);
+    if (page < 0x1000 || (page & (page - 1)))
+        rt_fatal("unsupported host page size %ld", page);
+    host_page_size = (size_t)page;
+    uint8_t *mapping = mmap(NULL, (1ull << 32) + host_page_size, PROT_NONE,
+                            MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    rt_mem = mapping == MAP_FAILED ? NULL : mapping + host_page_size - 0x1000;
 #endif
     if (!rt_mem) rt_fatal("cannot reserve 4 GB of address space for game memory");
     rt_commit(rt_image_base, rt_image_size);

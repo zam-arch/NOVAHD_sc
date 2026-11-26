@@ -1,0 +1,53 @@
+# Recovery 0.8. Desbloqueo del runtime nativo
+
+El usuario probó la 0.7 en el POCO F8 Pro con Android 17 ARM64: campaña, movimiento, disparos, recarga, objetivos y selección de niveles funcionan. Las APK de 0.5, 0.6 y 0.7 conservan los SHA-256 de sus entregas. La rama 0.8 cambia el runtime **fuente** y su construcción. La biblioteca instalada en el POCO sigue siendo la precompilada. La aplicación Java, el reproductor Android, el instalador y las rutas de guardado conservan el código de 0.7.
+
+## Inventario del motor
+
+| Componente | Evidencia y límite |
+|---|---|
+| Biblioteca | ELF64 AArch64 de tipo DYN, SHA-256 `ab6a0489e69bce594bd9eb32abb42eaf30b73ea577adbc7406b1c7ee9dcfc24c`. Tiene 21.230 exportaciones de funciones traducidas `f_…`, 217 imports fuertes indefinidos y tres PT_LOAD alineados a 16 KiB. DT_NEEDED contiene log, android, EGL, GLESv1_CM, aaudio, dl, m y c. No se hallaron exportaciones `Java_*` ni `JNI_OnLoad`. |
+| Imagen e inicialización | `assets/image.bin` mide 4.517.888 bytes y su SHA-256 es `8800ee114204bca4313c80b3da3fb9e2c6a39575eda2eedc2324dd27b3c65709`. Es una imagen invitada ya empaquetada para la dirección 0x1000. `image_meta.c` aporta main, inicializadores, imports, binds, secciones ObjC y nombres. La imagen carece de un juego de objetos ELF reubicables. El Mach-O es la entrada que proporciona al traductor su contexto de símbolos, secciones, imports y código ARM/Thumb. |
+| Android y JNI | Glue `ANativeActivity_onCreate` → `android_main` → imagen, runtime ObjC y dispatcher. `android_main.c` usa JNI como cliente para consultar la rotación del display. No existe un puente JNI de métricas o eventos del juego en la biblioteca entregada. Java puede medir su actividad, memoria y páginas, pero no su render nativo. |
+| Render | `gles1.c` adapta softfp, punteros invitados y offsets de buffers a GLES, emula PVRTC y BGRA cuando aplica, guarda estado alrededor del blit y ajusta viewport, proyección y HUD. El motor usa EGL y libGLESv1_CM del sistema. La sonda de 0.7 es un contexto distinto y no informa de qué rama usó la campaña. |
+| Audio | `openal.c` implementa imports AL/ALC con un mixer que entrega PCM estéreo a `audio_android.c`. Ese backend usa AAudio. Los módulos se pueden volver a compilar sin regenerar los shards si se mantiene su ABI con el traductor. Ajustar por diálogo o pista exige primero identificar fuentes/eventos de juego; el stream mezclado no expone esa clasificación. |
+| Entrada | `android_main.c` procesa eventos Android, rotación, escalado a coordenadas invitadas y mapeo inverso de HUD. `uikit.c` entrega toques y acelerómetro a los objetos invitados. Cambiar el espacio lógico o el FOV requiere revisar el contrato entre render y toque. |
+| Escenarios y recursos | El instalador Android verifica los 44 archivos. El runtime mapea el bundle y directorio de usuario a rutas del juego; cargar niveles y deserializar recursos ocurre en el juego traducido. Los packs de escenarios son ZIP, con BDAE, CFF, TGA, COL, LVL y otros registros internos. Su esquema de colisiones, materiales, iluminación y spawns sigue por validar. |
+
+## Separación verificable y datos faltantes
+
+En el enlazador existe un límite de componentes: el traductor produce 48 shards y el dispatcher, llamados mediante `rc_dispatch` y `rc_is_entry`. El runtime aporta `rc_import` y `rc_hostcall`. Ambas mitades comparten la estructura de CPU, macros y convenciones de `recomp.h`, el mapa de memoria y el orden de imports. Son objetos de un mismo enlace, no plugins intercambiables dentro de la biblioteca oficial. Los módulos de memoria, GLES, EGL, UIKit, audio, MediaPlayer y sockets pueden cambiar a nivel fuente y volver a enlazarse sin traducir otra vez si se preserva ese contrato.
+
+La 0.8 agrega `build_apk.py --export-relink-inputs` para congelar un conjunto exacto, y `--relink-inputs` para volver a enlazar el runtime sin invocar el traductor ni requerir el Mach-O en ese paso. La verificación exige el inventario/hash de cada archivo, AArch64 reubicable, ABI de `recomp.h`, Android API 26, modo checked y versión NDK. Es comprobación de integridad, por lo que el conjunto debe venir del propietario o de una compilación autorizada. Una prueba con metadatos, datos y dispatcher sintéticos enlazó un ELF ARM64 que exporta NativeActivity y la sonda. Alterar el objeto provocó el rechazo esperado. El modo legado que toma objetos de caché por mtime no se utilizó.
+
+**Para una compilación del juego** hacen falta los 48 objetos de funciones, el objeto del dispatcher, `image_meta.c` e `image.bin` de la misma generación, con manifiesto o procedencia comprobable. También sirven sus fuentes traducidos con prototipos y configuración, compilados con el mismo ABI. Si ese conjunto no aparece, necesitamos el ejecutable legítimo iPad 1.0.6 ARMv6 `Payload/NovaHD.app/NovaHD` para regenerarlo. En el workspace y el ZIP revisados no están los objetos ni los metadatos. El APK contiene el ELF ya enlazado y la imagen, sin el Mach-O ni el conjunto de entrada. Una tabla de símbolos exportados no reconstruye los objetos: el enlace final ha aplicado relocaciones, fijado símbolos locales y combinado secciones. Sustituir funciones por hooks del linker o editar offsets del ELF no aporta el mismo contrato. No se parcheó el binario.
+
+Ejemplo con un bundle legítimo y versionado:
+
+```sh
+python3 tools/recomp/build_apk.py --relink-inputs /ruta/privada/inputs --native-only \
+  --out build/recovery/native --ndk-version 28.2.13676358 --frame-log
+```
+
+## Cambios fuente y alcance de pruebas
+
+- **Framebuffer.** Un mismo helper sirve para alta y resize. D24S8 se verifica, D16 retira stencil y se verifica otra vez. Un resize fallido intenta recuperar el tamaño anterior; si tampoco es completo, se marca fallida la presentación auxiliar. Prueba host con callbacks GL simulados verifica el orden y la propagación del estado incompleto. Pendientes regresión con EGL real y confirmación de la ruta exacta del glitch en el POCO.
+- **Memoria.** En POSIX se mide `_SC_PAGESIZE` y se reserva mapa más una página. La base invitada se desplaza para que `0x1000` coincida con la segunda página física, conservando la guardia nula. Los commits alinean direcciones host, validan overflow y límite invitado de 4 GiB. La página Mach invitada sigue siendo de 4 KiB; no se cambió esa API ni las convenciones del heap invitado. Prueba de mapeo Linux real comprueba imagen, stubs, heap y SIGSEGV en la guardia en un host 4 KiB. Otra prueba cubre aritmética para 4 y 16 KiB. Falta kernel Android de 16 KiB y arranque del juego.
+- **Telemetría opt-in.** `--frame-log` mide tiempo monotónico entre retornos de `eglSwapBuffers` exitosos, swaps por segundo, tamaño medido de la superficie EGL y dimensiones actuales del FBO auxiliar si existe. Contabiliza envíos al compositor y su cadencia, no fotogramas mostrados ni tiempo GPU. Para FPS presentados se necesitan timestamps del compositor disponibles en ese contexto. El dato no se publica en la interfaz Java y no se ejecutó en el POCO.
+- **FOV, HUD, ancho y refresco.** El runtime calcula tamaño y aspecto de presentación, aplica proyección panorámica y la inversa del HUD/tacto. La versión fuente conserva ese comportamiento. El bucle está limitado por un periodo de 1/60 y swap interval 1. Para 90/120 hay que separar pasos de simulación de cadencia de render, verificar el modo físico y comparar tiempos, latencia y consumo. Elevar el timer no garantiza FPS ni preserva la lógica. Probar también 4:3, 16:9, 20:9, pantalla recortada y ambos landscapes. Ningún resultado de FPS o resolución se atribuye todavía al Adreno 830.
+
+## Música integrada
+
+`runtime/offline.c` ofrece `MPMediaQuery`, `MPMediaPickerController` y `MPMusicPlayerController`, con consultas vacías y comandos sin reproducción. Se puede preservar la biblioteca privada y el reproductor Java de 0.7 y, después del relink, publicar identificadores estables, título/artista/lista y acciones mediante un puente JNI en el hilo apropiado. Hay que emitir notificaciones de selección y estado con las convenciones ObjC del invitado y comprobar continuidad al perder foco. El volumen Java seguiría separado. La atenuación de diálogos o música dinámica requiere distinguir fuentes o eventos reales de la campaña; se debe identificar con trazas y símbolos antes de engancharlo. No se añadió un puente ni se modificó Java en esta fase.
+
+## Red, mapas y mods
+
+`offline.c` devuelve cero flags desde `SCNetworkReachabilityGetFlags`. `socket()` produce EACCES, y `connect`, `send`, `recv`, `sendto`, `recvfrom` y operaciones relacionadas fallan porque no hay descriptor. DNS se limita a casos locales, Bonjour no descubre ni resuelve pares y GameKit desactiva el flujo Bluetooth. Los símbolos recuperados registran creación/unión, lobby, estado de jugadores y arranque, con algunas identificaciones heurísticas. `DataPacket` aporta evidencia de campos de longitud prefijada, pero aún faltan captura legítima, framing, orden de bytes, autoridad, retransmisión y actualizaciones de jugador. Una infraestructura propia implica implementar el contrato verificado de descubrimiento/lobby/transporte, o sustituirlo por un puente con protocolo conocido. ICE/STUN/TURN y señalización solo resuelven rutas, no validan la sincronización.
+
+Se creó `tools/diagnostics/lan_echo.py`, un intercambio unicast UDP de una solicitud con nonce en una IP explícita RFC1918/loopback. Se probó con dos sockets IPv4 loopback. Para dos máquinas propias en la misma LAN se puede usar un proceso `serve` con su IP local y un proceso `ping` dirigido a esa IP. No se probó entre dos teléfonos y no descubre servidores ni usa el protocolo del juego. No se habilitó multijugador.
+
+El análisis de paquetes de 0.6 permite avanzar con un inspector offline de recursos propios antes de extender el cargador. Un módulo de plugins necesita versiones de esquema, límites de recursos, rutas privadas separadas, validación de geometría/materiales/luces/colisiones/spawns y un hash de mapa compartido antes de sincronizar jugadores. Estudiar conversión Vanguard Zero e importación OBJ, GLB, WAD y BSP solo con entradas autorizadas. Se requiere demostrar una escena mínima original que cargue en el motor. Los esquemas LVL/COL/BDAE aún incompletos impiden prometer importación jugable. No se implementó editor ni carga de mods.
+
+## Entrega
+
+No se generó APK 0.8. El ELF sintético valida el mecanismo de enlace y no incluye la campaña. Las verificaciones de memoria y FBO no equivalen a un motor funcional en el POCO. Se conservaron los respaldos y la firma de las versiones anteriores. La siguiente fase requiere aprobación y el conjunto legítimo de objetos/metadatos o el Mach-O original.
