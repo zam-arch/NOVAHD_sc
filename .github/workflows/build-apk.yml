@@ -2,7 +2,7 @@ name: Build N.O.V.A. HD APK (ARM64)
 
 on:
   push:
-    branches: [development, recovery/v0.5, recovery/prebuilt-arm64, recovery/v0.6]
+    branches: [development, recovery/v0.5, recovery/prebuilt-arm64, recovery/v0.6, recovery/v0.7]
   pull_request:
     branches: [development]
   workflow_dispatch:

@@ -36,7 +36,7 @@
     <string name="settings_manifest_url">URL del manifiesto</string>
     <string name="settings_auto_repair">Reparar automáticamente</string>
     <string name="settings_notifications">Notificaciones</string>
-    <string name="about_version">0.6 Recovery</string>
+    <string name="about_version">0.7 Recovery</string>
     <string name="about_credits">Basado en NOVA3_sc\nGameloft N.O.V.A. HD (iOS 1.0.6)\nRecompilación estática ARM64</string>
     <string name="import_prompt">Selecciona la carpeta NovaHD.app de tu copia legítima</string>
     <string name="import_not_available">La importación de recursos aún no está disponible en esta compilación.</string>

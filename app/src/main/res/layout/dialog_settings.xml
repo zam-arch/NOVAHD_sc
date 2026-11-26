@@ -31,4 +31,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/graphics_overlay_enable" />
+    <Button android:id="@+id/musicLibrary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Música personalizada" />
 </LinearLayout>

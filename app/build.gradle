@@ -17,8 +17,8 @@ android {
         applicationId "com.novahd.recomp"
         minSdk 26
         targetSdk 34
-        versionCode 6
-        versionName(officialEngine ? "0.6-recovery-arm64-4k" : "0.6-recovery")
+        versionCode 7
+        versionName(officialEngine ? "0.7-recovery-arm64-4k" : "0.7-recovery")
         buildConfigField "boolean", "OFFICIAL_ENGINE", officialEngine.toString()
         
         ndk {

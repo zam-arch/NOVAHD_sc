@@ -104,6 +104,16 @@ final class GraphicsProbe {
             report.append("incompleto ").append(hex(status));
         }
         report.append("\nError GLES de la prueba: ").append(hex(GLES10.glGetError()));
+        if (packed && status == GLES11Ext.GL_FRAMEBUFFER_COMPLETE_OES) {
+            GLES11Ext.glRenderbufferStorageOES(renderbuffer, GLES11Ext.GL_DEPTH_COMPONENT16_OES, size, size);
+            report.append("\nFallback D16 conservando stencil: ")
+                    .append(hex(GLES11Ext.glCheckFramebufferStatusOES(framebuffer)))
+                    .append(" · GLES ").append(hex(GLES10.glGetError()));
+            GLES11Ext.glFramebufferRenderbufferOES(framebuffer, GLES11Ext.GL_STENCIL_ATTACHMENT_OES, renderbuffer, 0);
+            report.append("\nFallback D16 retirando stencil: ")
+                    .append(hex(GLES11Ext.glCheckFramebufferStatusOES(framebuffer)))
+                    .append(" · GLES ").append(hex(GLES10.glGetError()));
+        }
         GLES11Ext.glBindFramebufferOES(framebuffer, 0);
         GLES11Ext.glDeleteFramebuffersOES(1, fbo, 0);
         GLES11Ext.glDeleteRenderbuffersOES(1, depth, 0);

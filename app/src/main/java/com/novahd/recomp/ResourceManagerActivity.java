@@ -171,6 +171,10 @@ public final class ResourceManagerActivity extends AppCompatActivity {
                 input.setError(error.getMessage());
             }
         }));
+        content.findViewById(R.id.musicLibrary).setOnClickListener(view -> {
+            dialog.dismiss();
+            startActivity(new Intent(this, MusicActivity.class));
+        });
         dialog.show();
     }
 
