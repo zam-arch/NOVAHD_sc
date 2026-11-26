@@ -1,0 +1,8 @@
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="recovery" android:enabled="true"
+        android:shortcutShortLabel="@string/recovery_shortcut">
+        <intent android:action="com.novahd.recomp.RECOVERY"
+            android:targetPackage="com.novahd.recomp"
+            android:targetClass="com.novahd.recomp.LauncherActivity" />
+    </shortcut>
+</shortcuts>

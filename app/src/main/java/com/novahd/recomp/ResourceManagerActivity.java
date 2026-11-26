@@ -5,7 +5,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import com.novahd.compat.DeviceMemory;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.CheckBox;
@@ -16,9 +15,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.textfield.TextInputEditText;
 
-import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.Locale;
 
 public final class ResourceManagerActivity extends AppCompatActivity {
@@ -49,6 +46,9 @@ public final class ResourceManagerActivity extends AppCompatActivity {
         findViewById(R.id.repairButton).setVisibility(View.GONE);
         ((TextView) findViewById(R.id.versionText)).setText(BuildConfig.VERSION_NAME);
         detail.setVisibility(View.VISIBLE);
+        if (getIntent().getBooleanExtra(LauncherActivity.BOOT_FAILED, false))
+            new MaterialAlertDialogBuilder(this).setMessage(R.string.launch_failed)
+                    .setPositiveButton(android.R.string.ok, null).show();
         primary.setOnClickListener(view -> {
             if (manager.ready) {
                 launching = true;
@@ -116,20 +116,17 @@ public final class ResourceManagerActivity extends AppCompatActivity {
     };
 
     private boolean launchGame() {
-        if (BuildConfig.FOUR_KIB_ONLY && DeviceMemory.pageBytes() != 4096L) {
-            new MaterialAlertDialogBuilder(this).setMessage(R.string.game_runtime_page_size)
+        int error = LauncherActivity.runtimeError(this);
+        if (error != 0) {
+            new MaterialAlertDialogBuilder(this).setMessage(error)
                     .setPositiveButton(android.R.string.ok, null).show();
             return false;
         }
-        File library = new File(getApplicationInfo().nativeLibraryDir, "libnovahd.so");
-        try (InputStream image = getAssets().open("image.bin")) {
-            if (!library.isFile() || image.read() == -1) throw new IOException();
-        } catch (IOException noRuntime) {
-            new MaterialAlertDialogBuilder(this).setMessage(R.string.game_runtime_missing_message)
+        if (!LauncherActivity.startGame(this)) {
+            new MaterialAlertDialogBuilder(this).setMessage(R.string.launch_failed)
                     .setPositiveButton(android.R.string.ok, null).show();
             return false;
         }
-        startActivity(new Intent(this, GameActivity.class));
         finish();
         return true;
     }

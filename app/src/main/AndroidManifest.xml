@@ -12,17 +12,20 @@
         android:theme="@style/Theme.NOVAHD.ResourceManager"
         android:usesCleartextTraffic="false">
         
-        <activity
-            android:name=".ResourceManagerActivity"
-            android:exported="true"
-            android:screenOrientation="sensorLandscape"
-            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|density"
+        <activity android:name=".LauncherActivity"
+            android:exported="true" android:screenOrientation="sensorLandscape"
             android:theme="@style/Theme.NOVAHD.ResourceManager.Fullscreen">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
+
+        <activity android:name=".ResourceManagerActivity"
+            android:exported="false" android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|density"
+            android:theme="@style/Theme.NOVAHD.ResourceManager.Fullscreen" />
 
         <activity android:name=".MusicActivity" android:exported="false"
             android:label="Música personalizada" android:screenOrientation="sensorLandscape" />
