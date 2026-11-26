@@ -49,6 +49,9 @@
 
 #include "rt.h"
 #include "catalog_wire.h"
+#ifdef __ANDROID__
+#include <pthread.h>
+#endif
 
 #define SELF c->r[0]
 #define ARG(k) rt_arg(c, (k) + 2)
@@ -1093,7 +1096,7 @@ M(q_dealloc) { (void)m; rt_release(c, qs(SELF)->predicates); rt_objc_free(SELF);
 
 /* MPMediaItemCollection */
 static id cls_collection, cls_playlist, cls_media_item;
-typedef struct { id title, artist, album; } media_item_state;
+typedef struct { id title, artist, album, track_id; } media_item_state;
 typedef struct { id items, name; } coll_state;
 static coll_state *colls(id x) { return rt_objc_state(x, sizeof(coll_state)); }
 M(co_with_items) {
@@ -1134,6 +1137,7 @@ M(mi_dealloc) {
     rt_release(c, state->title);
     rt_release(c, state->artist);
     rt_release(c, state->album);
+    rt_release(c, state->track_id);
     rt_objc_free(SELF);
 }
 
@@ -1171,6 +1175,7 @@ static id query_catalog(cpu_t *c, const query_state *query, int collections) {
         state->title = rt_nsstring_new(fields[TRACK_TITLE]);
         state->artist = rt_nsstring_new(fields[TRACK_ARTIST]);
         state->album = rt_nsstring_new(fields[TRACK_ALBUM]);
+        state->track_id = rt_nsstring_new(fields[TRACK_ID]);
         id items = result;
         if (groups) {
             id key = rt_nsstring_new(fields[TRACK_GROUP]);
@@ -1202,6 +1207,145 @@ static id query_catalog(cpu_t *c, const query_state *query, int collections) {
 
 M(q_items) { (void)m; RET(query_catalog(c, qs(SELF), 0)); }
 M(q_collections) { (void)m; RET(query_catalog(c, qs(SELF), 1)); }
+
+#ifdef __ANDROID__
+static id music_queue, music_selected;
+static char music_snapshot[40] = "0:";
+static unsigned music_observers;
+static int music_selection_pending, music_requested;
+static pthread_mutex_t music_lock = PTHREAD_MUTEX_INITIALIZER;
+static int music_slot(id player) { return player == ipod_player ? 1 : 2; }
+
+static const char *music_item_id(id item) {
+    if (!item || !rt_is_kind(item, cls_media_item)) return "";
+    media_item_state *state = rt_objc_state(item, sizeof(media_item_state));
+    return rt_nsstring_utf8(state->track_id);
+}
+
+M(mu_queue_collection) {
+    (void)m;
+    id collection = ARG(0);
+    id items = collection && rt_is_kind(collection, cls_collection) ? colls(collection)->items : 0;
+    pthread_mutex_lock(&music_lock);
+    set_retained(c, &music_queue, items);
+    set_retained(c, &music_selected, 0);
+    music_selection_pending = 1;
+    pthread_mutex_unlock(&music_lock);
+}
+
+M(mu_queue_query) {
+    (void)m;
+    id query = ARG(0);
+    id items = query && rt_is_kind(query, cls_query) ? query_catalog(c, qs(query), 0) : 0;
+    pthread_mutex_lock(&music_lock);
+    set_retained(c, &music_queue, items);
+    set_retained(c, &music_selected, 0);
+    music_selection_pending = 1;
+    pthread_mutex_unlock(&music_lock);
+}
+
+static void music_start(const char *preferred) {
+    enum { MAX_QUEUE = 1024 };
+    const char *ids[MAX_QUEUE];
+    size_t count = 0, total = rt_nsarray_count(music_queue);
+    if (preferred[0]) ids[count++] = preferred;
+    else if (total) {
+        const char *first = music_item_id(rt_nsarray_at(music_queue, 0));
+        if (*first) ids[count++] = first;
+    }
+    for (size_t k = 0; k < total && count < MAX_QUEUE; ++k) {
+        const char *id = music_item_id(rt_nsarray_at(music_queue, k));
+        if (*id) ids[count++] = id;
+    }
+    if (count) {
+        music_requested = 1;
+        rt_platform_music_command(RT_MUSIC_PLAY, ids, count);
+    }
+}
+
+M(mu_set_item) {
+    (void)m;
+    id item = ARG(0);
+    if (!*music_item_id(item)) return;
+    pthread_mutex_lock(&music_lock);
+    set_retained(c, &music_selected, item);
+    music_selection_pending = 1;
+    if (music_snapshot[0] == '1') music_start(music_item_id(item));
+    pthread_mutex_unlock(&music_lock);
+}
+M(mu_play) {
+    (void)m;
+    pthread_mutex_lock(&music_lock);
+    const char *selected = music_item_id(music_selected);
+    const char *current = music_snapshot + 2;
+    music_start(music_selection_pending || !*current ? selected : current);
+    music_selection_pending = 0;
+    pthread_mutex_unlock(&music_lock);
+}
+M(mu_pause) { (void)m; (void)c; rt_platform_music_command(RT_MUSIC_PAUSE, NULL, 0); }
+M(mu_stop) { (void)m; (void)c; rt_platform_music_command(RT_MUSIC_STOP, NULL, 0); }
+M(mu_next) { (void)m; (void)c; rt_platform_music_command(RT_MUSIC_NEXT, NULL, 0); }
+M(mu_prev) { (void)m; (void)c; rt_platform_music_command(RT_MUSIC_PREVIOUS, NULL, 0); }
+M(mu_state) {
+    (void)m;
+    pthread_mutex_lock(&music_lock);
+    RET(music_snapshot[0] - '0');
+    pthread_mutex_unlock(&music_lock);
+}
+
+M(mu_current) {
+    (void)m;
+    pthread_mutex_lock(&music_lock);
+    const char *current = music_snapshot + 2;
+    id result = 0;
+    if (*current) {
+        for (uint32_t k = 0; k < rt_nsarray_count(music_queue); ++k) {
+            id item = rt_nsarray_at(music_queue, k);
+            if (!strcmp(current, music_item_id(item))) { result = item; break; }
+        }
+        if (!result && music_selected && !strcmp(current, music_item_id(music_selected))) result = music_selected;
+    }
+    RET(rt_autorelease(rt_retain(result)));
+    pthread_mutex_unlock(&music_lock);
+}
+
+M(mu_observe) {
+    (void)m;
+    pthread_mutex_lock(&music_lock);
+    music_observers |= (unsigned)music_slot(SELF);
+    pthread_mutex_unlock(&music_lock);
+}
+M(mu_unobserve) {
+    (void)m;
+    pthread_mutex_lock(&music_lock);
+    music_observers &= ~(unsigned)music_slot(SELF);
+    pthread_mutex_unlock(&music_lock);
+}
+
+void rt_offline_music_tick(cpu_t *c) {
+    static double next;
+    pthread_mutex_lock(&music_lock);
+    int requested = music_requested;
+    pthread_mutex_unlock(&music_lock);
+    if (!requested) return;
+    double now = rt_now();
+    if (now < next) return;
+    next = now + 0.2;
+    char state[40];
+    rt_platform_music_state(state);
+    pthread_mutex_lock(&music_lock);
+    int playback_changed = music_snapshot[0] != state[0], item_changed = strcmp(music_snapshot + 2, state + 2);
+    memcpy(music_snapshot, state, strlen(state) + 1);
+    unsigned observers = music_observers;
+    pthread_mutex_unlock(&music_lock);
+    for (int bit = 1; bit <= 2; bit *= 2) {
+        if (!(observers & bit)) continue;
+        id player = bit == 1 ? ipod_player : app_player;
+        if (item_changed) rt_notify(c, "MPMusicPlayerControllerNowPlayingItemDidChangeNotification", player, 0);
+        if (playback_changed) rt_notify(c, "MPMusicPlayerControllerPlaybackStateDidChangeNotification", player, 0);
+    }
+}
+#endif
 
 /* MPMediaPropertyPredicate */
 static id cls_predicate;
@@ -1462,11 +1606,19 @@ void rt_offline_define(void) {
     METHODS(cls_music, {"playbackState", ret_zero}, {"nowPlayingItem", ret_zero}, {"repeatMode", ret_zero},
             {"shuffleMode", ret_zero}, {"volume", mu_volume}, {"currentPlaybackTime", ret_dzero},
             {"retain", ret_self}, {"release", ret_self}, {"autorelease", ret_self}, {"dealloc", ret_self});
+#ifdef __ANDROID__
+    METHODS(cls_music, {"play", mu_play}, {"pause", mu_pause}, {"stop", mu_stop},
+            {"skipToNextItem", mu_next}, {"skipToPreviousItem", mu_prev},
+            {"setQueueWithQuery:", mu_queue_query}, {"setQueueWithItemCollection:", mu_queue_collection},
+            {"setNowPlayingItem:", mu_set_item}, {"playbackState", mu_state}, {"nowPlayingItem", mu_current},
+            {"beginGeneratingPlaybackNotifications", mu_observe}, {"endGeneratingPlaybackNotifications", mu_unobserve});
+#else
     NOOPS(cls_music, "play", "pause", "stop", "setNowPlayingItem:", "setQueueWithQuery:",
           "setQueueWithItemCollection:", "beginGeneratingPlaybackNotifications",
-          "endGeneratingPlaybackNotifications", "skipToNextItem", "skipToPreviousItem", "skipToBeginning",
-          "setVolume:", "setRepeatMode:", "setShuffleMode:", "setCurrentPlaybackTime:", "beginSeekingForward",
-          "beginSeekingBackward", "endSeeking");
+          "endGeneratingPlaybackNotifications", "skipToNextItem", "skipToPreviousItem");
+#endif
+    NOOPS(cls_music, "skipToBeginning", "setVolume:", "setRepeatMode:", "setShuffleMode:",
+          "setCurrentPlaybackTime:", "beginSeekingForward", "beginSeekingBackward", "endSeeking");
     ipod_player = rt_objc_alloc(cls_music);
     app_player = rt_objc_alloc(cls_music);
 

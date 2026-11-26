@@ -220,6 +220,77 @@ char *rt_platform_music_catalog(int grouping, size_t *length) {
     return result;
 }
 
+static JNIEnv *music_environment(JavaVM **vm, int *detach) {
+    *vm = app_state->activity->vm;
+    JNIEnv *env = NULL;
+    jint state = (**vm)->GetEnv(*vm, (void **)&env, JNI_VERSION_1_6);
+    *detach = state == JNI_EDETACHED;
+    if (*detach && (**vm)->AttachCurrentThread(*vm, &env, NULL) != JNI_OK) return NULL;
+    return env;
+}
+
+static void music_complete(JavaVM *vm, JNIEnv *env, int detach) {
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        rt_log("music: Android bridge rejected a request");
+    }
+    (*env)->PopLocalFrame(env, NULL);
+    if (detach) (*vm)->DetachCurrentThread(vm);
+}
+
+void rt_platform_music_command(int command, const char *const *ids, size_t count) {
+    JavaVM *vm;
+    int detach;
+    JNIEnv *env = music_environment(&vm, &detach);
+    if (!env) return;
+    if ((*env)->PushLocalFrame(env, 8) != JNI_OK) {
+        (*env)->ExceptionClear(env);
+        if (detach) (*vm)->DetachCurrentThread(vm);
+        return;
+    }
+    jobject activity = app_state->activity->clazz;
+    jclass cls = (*env)->GetObjectClass(env, activity);
+    jmethodID method = cls ? (*env)->GetMethodID(env, cls, "commandGameMusic", "(I[Ljava/lang/String;)V") : NULL;
+    jclass string = method ? (*env)->FindClass(env, "java/lang/String") : NULL;
+    jobjectArray queue = string ? (*env)->NewObjectArray(env, (jsize)count, string, NULL) : NULL;
+    if (queue) {
+        for (size_t n = 0; n < count; ++n) {
+            jstring id = (*env)->NewStringUTF(env, ids[n]);
+            if (!id) break;
+            (*env)->SetObjectArrayElement(env, queue, (jsize)n, id);
+            (*env)->DeleteLocalRef(env, id);
+            if ((*env)->ExceptionCheck(env)) break;
+        }
+        if (!(*env)->ExceptionCheck(env)) (*env)->CallVoidMethod(env, activity, method, (jint)command, queue);
+    }
+    music_complete(vm, env, detach);
+}
+
+void rt_platform_music_state(char state[40]) {
+    strcpy(state, "0:");
+    JavaVM *vm;
+    int detach;
+    JNIEnv *env = music_environment(&vm, &detach);
+    if (!env) return;
+    if ((*env)->PushLocalFrame(env, 8) != JNI_OK) {
+        (*env)->ExceptionClear(env);
+        if (detach) (*vm)->DetachCurrentThread(vm);
+        return;
+    }
+    jobject activity = app_state->activity->clazz;
+    jclass cls = (*env)->GetObjectClass(env, activity);
+    jmethodID method = cls ? (*env)->GetMethodID(env, cls, "readGameMusicState", "()Ljava/lang/String;") : NULL;
+    jstring result = method ? (*env)->CallObjectMethod(env, activity, method) : NULL;
+    if (result) {
+        const char *value = (*env)->GetStringUTFChars(env, result, NULL);
+        if (value) {
+            snprintf(state, 40, "%s", value);
+            (*env)->ReleaseStringUTFChars(env, result, value);
+        }
+    }
+    music_complete(vm, env, detach);
+}
+
 static int jni_check(void) {
     if ((*jni)->ExceptionCheck(jni)) { (*jni)->ExceptionClear(jni); return 0; }
     return 1;

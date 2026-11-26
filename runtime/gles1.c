@@ -900,21 +900,27 @@ static void wide_place(float lo, float hi, float xa, float xb, struct place *p) 
     }
 }
 
-enum wide_pass { PASS_OFFSCREEN, PASS_CLEAR, PASS_3D, PASS_CLIPPED, PASS_2D, PASS_BATCH, PASS_COUNT };
+enum wide_pass { PASS_OFFSCREEN, PASS_CLEAR, PASS_3D, PASS_CLIPPED, PASS_2D, PASS_BATCH };
 
 #ifdef NOVA_FRAME_LOG
 static void trace_wide_pass(enum wide_pass pass, const struct place *place, const I viewport[4], const I scissor[4]) {
     static const char *const names[] = {"offscreen", "clear", "3D", "scissored", "2D", "2D-batch"};
-    static struct { int valid, hud; uint32_t fb; I vp[4], sc[4]; } last[PASS_COUNT];
+    typedef struct { int valid, pass, hud; uint32_t fb; I vp[4], sc[4]; } pass_sample;
+    static pass_sample recent[48];
+    static unsigned next;
     if (!atomic_load(&trace_enabled)) return;
-    if (last[pass].valid && last[pass].hud == hud_on && last[pass].fb == bound_fb &&
-        !memcmp(last[pass].vp, viewport, sizeof last[pass].vp) &&
-        !memcmp(last[pass].sc, scissor, sizeof last[pass].sc)) return;
-    last[pass].valid = 1;
-    last[pass].hud = hud_on;
-    last[pass].fb = bound_fb;
-    memcpy(last[pass].vp, viewport, sizeof last[pass].vp);
-    memcpy(last[pass].sc, scissor, sizeof last[pass].sc);
+    for (unsigned k = 0; k < sizeof recent / sizeof recent[0]; ++k) {
+        pass_sample *entry = &recent[k];
+        if (entry->valid && entry->pass == (int)pass && entry->hud == hud_on && entry->fb == bound_fb &&
+            !memcmp(entry->vp, viewport, sizeof entry->vp) && !memcmp(entry->sc, scissor, sizeof entry->sc)) return;
+    }
+    pass_sample *entry = &recent[next++ % (sizeof recent / sizeof recent[0])];
+    entry->valid = 1;
+    entry->pass = pass;
+    entry->hud = hud_on;
+    entry->fb = bound_fb;
+    memcpy(entry->vp, viewport, sizeof entry->vp);
+    memcpy(entry->sc, scissor, sizeof entry->sc);
     char line[256];
     snprintf(line, sizeof line,
              "%s fb=%u HUD=%d/%d scale=%.3f,%.3f VP=%d,%d,%d,%d SC=%d,%d,%d,%d",
@@ -1074,6 +1080,11 @@ static void trace_gl_frame(void) {
     static int prior_hud = -1, prior_seen = -1;
     static unsigned tick;
     if (++tick % 15 && prior_hud == hud_on && prior_seen == hud_seen) return;
+    if (prior_hud != hud_on || prior_seen != hud_seen) {
+        char transition[64];
+        snprintf(transition, sizeof transition, "HUD anterior %d/%d actual %d/%d", prior_hud, prior_seen, hud_on, hud_seen);
+        rt_platform_graphics_event(transition);
+    }
     prior_hud = hud_on;
     prior_seen = hud_seen;
     T_glGetIntegerv gi = F(glGetIntegerv);

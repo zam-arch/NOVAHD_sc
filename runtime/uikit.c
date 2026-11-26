@@ -1679,6 +1679,9 @@ void rt_uikit_frame(cpu_t *c) {
     layout_windows(c);
     rt_runloop_run_once(c);
     run_deferred(c);
+#ifdef __ANDROID__
+    rt_offline_music_tick(c);
+#endif
     pool_end(c, pool);
 }
 

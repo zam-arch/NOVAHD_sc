@@ -78,6 +78,22 @@ final class MusicLibrary {
         return result;
     }
 
+    synchronized Track find(String id) { return tracks.get(id); }
+
+    synchronized List<Track> resolve(String[] ids) {
+        List<Track> result = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (int i = 1; i < ids.length; ++i) {
+            Track track = tracks.get(ids[i]);
+            if (track != null && seen.add(track.id)) result.add(track);
+        }
+        if (ids.length > 0) {
+            Track selected = tracks.get(ids[0]);
+            if (selected != null && seen.add(selected.id)) result.add(0, selected);
+        }
+        return result;
+    }
+
     synchronized List<String> playlists() { return new ArrayList<>(lists.keySet()); }
 
     synchronized byte[] catalog(int grouping) {

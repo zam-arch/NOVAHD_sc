@@ -9,3 +9,6 @@ javac -d "$out" tests/MusicCatalogWireTest.java app/src/main/java/com/novahd/rec
 java -cp "$out" com.novahd.recomp.MusicCatalogWireTest "$out/catalog"
 cc -std=c11 -Wall -Wextra -Werror tests/native_catalog_wire.c -o "$out/catalog-test"
 "$out/catalog-test" "$out/catalog"
+cc -std=gnu11 -ffunction-sections -fdata-sections -Iruntime -Itools/recomp/runtime \
+    -Wl,--gc-sections tests/native_music_queue.c -pthread -o "$out/music-queue"
+"$out/music-queue"

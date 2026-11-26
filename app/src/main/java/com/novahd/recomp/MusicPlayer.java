@@ -30,6 +30,8 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
     private boolean prepared, playing, requested, focused, shuffle, repeat, completed;
     private String message = "Selecciona una canción de tu biblioteca.";
     private Runnable listener;
+    private volatile String guestSnapshot = "0:";
+    private boolean guestOwnsPlayback;
 
     MusicPlayer(Application app) {
         this.app = app;
@@ -55,7 +57,41 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
 
     void observe(Runnable listener) { this.listener = listener; }
 
-    private void changed() { if (listener != null) listener.run(); }
+    private void changed() {
+        guestSnapshot = !guestOwnsPlayback || !hasTrack() ? "0:" :
+                (playing ? "1:" : completed ? "0:" : "2:") + queue.get(index).id;
+        if (listener != null) listener.run();
+    }
+
+    String guestSnapshot() { return guestSnapshot; }
+
+    void commandFromGame(int command, String[] ids) {
+        if (command == 0) {
+            if (ids.length == 0) return;
+            MusicLibrary library = MusicLibrary.get(app);
+            List<MusicLibrary.Track> songs = library.resolve(ids);
+            if (songs.isEmpty()) return;
+            MusicLibrary.Track track = library.find(ids[0]);
+            if (track == null || !songs.contains(track)) track = songs.get(0);
+            guestOwnsPlayback = true;
+            if (hasTrack() && queue.get(index).equals(track)) {
+                setSelection(songs, track);
+                if (!active()) toggle();
+                else changed();
+            } else {
+                setSelection(songs, track);
+                load();
+            }
+        } else if (guestOwnsPlayback) {
+            switch (command) {
+                case 1: pause(); break;
+                case 2: stop(); break;
+                case 3: skip(1); break;
+                case 4: skip(-1); break;
+                default: break;
+            }
+        }
+    }
 
     void setVolume(int value) {
         volume = value;
@@ -86,10 +122,15 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
     }
 
     void select(List<MusicLibrary.Track> songs, MusicLibrary.Track current) {
+        guestOwnsPlayback = false;
+        setSelection(songs, current);
+        load();
+    }
+
+    private void setSelection(List<MusicLibrary.Track> songs, MusicLibrary.Track current) {
         selection.clear();
         selection.addAll(songs);
         reorder(current);
-        load();
     }
 
     void remove(MusicLibrary.Track track) {
@@ -122,6 +163,7 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
     }
 
     void stop() {
+        guestOwnsPlayback = false;
         release();
         selection.clear();
         queue.clear();

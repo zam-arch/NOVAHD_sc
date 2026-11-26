@@ -234,6 +234,10 @@ void rt_platform_run(cpu_t *c);
  * on one thread at a time, so the main thread gives it up when it enters rt_platform_run. */
 void rt_platform_make_current(void);
 #ifdef __ANDROID__
+enum { RT_MUSIC_PLAY, RT_MUSIC_PAUSE, RT_MUSIC_STOP, RT_MUSIC_NEXT, RT_MUSIC_PREVIOUS };
+void rt_platform_music_command(int command, const char *const *ids, size_t count);
+void rt_platform_music_state(char state[40]);
+void rt_offline_music_tick(cpu_t *c);
 char *rt_platform_music_catalog(int grouping, size_t *length); /* malloc-owned UTF-8 rows */
 #endif
 

@@ -51,6 +51,16 @@ public class GameActivity extends NativeActivity {
         return MusicLibrary.get(this).catalog(grouping);
     }
 
+    public void commandGameMusic(int command, String[] ids) {
+        if (!getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE)
+                .getBoolean(GameDiagnosticsPanel.MUSIC_CATALOG, false)) return;
+        runOnUiThread(() -> ((RecoveryApplication) getApplication()).music().commandFromGame(command, ids));
+    }
+
+    public String readGameMusicState() {
+        return ((RecoveryApplication) getApplication()).music().guestSnapshot();
+    }
+
     @Override protected void onResume() {
         super.onResume();
         resumed = true;
