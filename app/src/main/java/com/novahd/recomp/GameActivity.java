@@ -37,8 +37,11 @@ public class GameActivity extends NativeActivity {
             | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         
         super.onCreate(savedInstanceState);
-        if (getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE)
-                .getBoolean(GameDiagnosticsPanel.ENABLED, false)) diagnostics = new GameDiagnosticsPanel(this);
+        android.content.SharedPreferences settings = getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE);
+        boolean overlay = settings.getBoolean(GameDiagnosticsPanel.ENABLED, false);
+        boolean nativeTrace = BuildConfig.REBUILT_ENGINE
+                && NativeWindowProbe.configure(overlay, settings.getInt(GameDiagnosticsPanel.CULLING, 0));
+        if (overlay) diagnostics = new GameDiagnosticsPanel(this, nativeTrace);
     }
 
     @Override protected void onResume() {

@@ -186,6 +186,8 @@ float rt_gl_wide_game_x(float across); /* a position across the wide screen -> t
 void rt_gl_bind_drawable(uint32_t renderbuffer, int width, int height); /* that renderbuffer is the window */
 #ifdef NOVA_FRAME_LOG
 void rt_gl_measure_render(int *width, int *height);
+void rt_gl_configure_diagnostics(int enabled, int cull);
+void rt_platform_graphics_sample(const char *details);
 #endif
 void rt_gl_present(void);                           /* called by -presentRenderbuffer: */
 

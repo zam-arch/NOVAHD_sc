@@ -10,7 +10,7 @@ def nativeRecovery = providers.gradleProperty("novaNativeRecovery").orElse("fals
 def windowProbe = providers.gradleProperty("novaWindowProbe").orElse("false").get().toBoolean()
 def rebuiltEngine = providers.gradleProperty("novaRebuiltEngine").orElse("false").get().toBoolean()
 if (rebuiltEngine && (!nativeRecovery || officialEngine)) {
-    throw new GradleException("The 0.9 APK requires the rebuilt runtime and private bundled assets.")
+    throw new GradleException("The rebuilt APK requires the rebuilt runtime and private bundled assets.")
 }
 if (windowProbe && !(officialEngine || rebuiltEngine)) {
     throw new GradleException("The probe requires the official or rebuilt 4 KiB engine.")
@@ -26,11 +26,12 @@ android {
         applicationId "com.novahd.recomp"
         minSdk 26
         targetSdk 34
-        versionCode(rebuiltEngine ? 10 : windowProbe ? 9 : (nativeRecovery ? 8 : 7))
-        versionName(rebuiltEngine ? "0.9-recovery-arm64-4k" : windowProbe ? "0.8.2-probe-arm64-4k" : nativeRecovery ? "0.8.1-recovery" : (officialEngine ? "0.7-recovery-arm64-4k" : "0.7-recovery"))
+        versionCode(rebuiltEngine ? 11 : windowProbe ? 9 : (nativeRecovery ? 8 : 7))
+        versionName(rebuiltEngine ? "0.10-recovery-arm64-4k" : windowProbe ? "0.8.2-probe-arm64-4k" : nativeRecovery ? "0.8.1-recovery" : (officialEngine ? "0.7-recovery-arm64-4k" : "0.7-recovery"))
         buildConfigField "boolean", "OFFICIAL_ENGINE", officialEngine.toString()
         
         buildConfigField "boolean", "FOUR_KIB_ONLY", (officialEngine || rebuiltEngine).toString()
+        buildConfigField "boolean", "REBUILT_ENGINE", rebuiltEngine.toString()
         buildConfigField "boolean", "WINDOW_PROBE", windowProbe.toString()
 
         ndk {

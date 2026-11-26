@@ -25,5 +25,17 @@ final class NativeWindowProbe {
         }
     }
 
+    static boolean configure(boolean trace, int culling) {
+        try {
+            System.loadLibrary("novahd");
+            configureGraphics(trace, culling);
+            return true;
+        } catch (UnsatisfiedLinkError unavailable) {
+            return false;
+        }
+    }
+
+    static native String readGraphics();
+    private static native void configureGraphics(boolean trace, int culling);
     private static native String sample(Surface surface);
 }

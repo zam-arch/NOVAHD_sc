@@ -550,6 +550,31 @@ static void render_sync(void) {
 }
 
 #ifdef NOVA_FRAME_LOG
+static pthread_mutex_t diagnostic_mutex = PTHREAD_MUTEX_INITIALIZER;
+static char diagnostic_gl[480], diagnostic_swaps[128];
+
+void rt_platform_graphics_sample(const char *details) {
+    pthread_mutex_lock(&diagnostic_mutex);
+    snprintf(diagnostic_gl, sizeof diagnostic_gl, "%s", details);
+    pthread_mutex_unlock(&diagnostic_mutex);
+}
+
+JNIEXPORT void JNICALL
+Java_com_novahd_recomp_NativeWindowProbe_configureGraphics(JNIEnv *env, jclass cls, jboolean enabled, jint cull) {
+    (void)env; (void)cls;
+    rt_gl_configure_diagnostics(enabled, cull);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_novahd_recomp_NativeWindowProbe_readGraphics(JNIEnv *env, jclass cls) {
+    (void)cls;
+    char text[sizeof diagnostic_gl + sizeof diagnostic_swaps + 2];
+    pthread_mutex_lock(&diagnostic_mutex);
+    snprintf(text, sizeof text, "%s\n%s", diagnostic_swaps, diagnostic_gl);
+    pthread_mutex_unlock(&diagnostic_mutex);
+    return (*env)->NewStringUTF(env, text);
+}
+
 /* Timings at successful eglSwapBuffers return. This is submission cadence, not display presentation. */
 static void log_swap_sample(EGLSurface target) {
     static _Thread_local uint64_t previous, start, frames_in_window;
@@ -570,9 +595,14 @@ static void log_swap_sample(EGLSurface target) {
         rt_gl_measure_render(&rw, &rh);
         char render[40] = "unavailable";
         if (rw > 0 && rh > 0) snprintf(render, sizeof render, "%dx%d", rw, rh);
-        if (eglQuerySurface(dpy, target, EGL_WIDTH, &w) && eglQuerySurface(dpy, target, EGL_HEIGHT, &h))
-            rt_log("frame: %.2f swaps/s, last %.2f ms, render %s, EGL %dx%d",
-                   1e9 * frames_in_window / (now - start), (now - previous) / 1e6, render, w, h);
+        if (eglQuerySurface(dpy, target, EGL_WIDTH, &w) && eglQuerySurface(dpy, target, EGL_HEIGHT, &h)) {
+            double cadence = 1e9 * frames_in_window / (now - start), interval = (now - previous) / 1e6;
+            pthread_mutex_lock(&diagnostic_mutex);
+            snprintf(diagnostic_swaps, sizeof diagnostic_swaps,
+                     "%.2f swaps/s | intervalo %.2f ms | FBO %s | EGL %dx%d", cadence, interval, render, w, h);
+            pthread_mutex_unlock(&diagnostic_mutex);
+            rt_log("frame: %.2f swaps/s, last %.2f ms, render %s, EGL %dx%d", cadence, interval, render, w, h);
+        }
         start = now;
         frames_in_window = 0;
     }

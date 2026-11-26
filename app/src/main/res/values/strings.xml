@@ -48,7 +48,13 @@
     <string name="device_diagnostics">Diagnóstico</string>
     <string name="graphics_probe_running">Comprobando OpenGL ES en un proceso separado…</string>
     <string name="graphics_copy">Copiar informe</string>
-    <string name="graphics_overlay_enable">Mostrar memoria y pantalla durante el juego</string>
-    <string name="graphics_overlay_summary">Pantalla %1$d × %2$d px · PSS %3$d KiB · página %4$d B
-FPS, tiempo de fotograma y resolución interna sin telemetría</string>
+    <string name="graphics_overlay_enable">Mostrar diagnóstico y guardar traza gráfica</string>
+    <string name="graphics_overlay_summary">Pantalla %1$d × %2$d px · PSS %3$d KiB · página %4$d B</string>
+    <string name="copy_graphics_trace">Copiar última traza de campaña</string>
+    <string name="trace_copied">Traza copiada</string>
+    <string-array name="graphics_culling_modes">
+        <item>Culling original</item>
+        <item>Prueba sin face culling</item>
+        <item>Prueba con orientación CW/CCW invertida</item>
+    </string-array>
 </resources>

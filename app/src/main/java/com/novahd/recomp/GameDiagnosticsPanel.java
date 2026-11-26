@@ -16,12 +16,19 @@ import com.novahd.compat.DeviceMemory;
 final class GameDiagnosticsPanel {
     static final String PREFS = "game_diagnostics";
     static final String ENABLED = "enabled";
+    static final String CULLING = "culling";
+    static final String TRACE = "last_trace";
     private final GameActivity activity;
+    private final boolean nativeTrace;
+    private final java.util.ArrayDeque<String> history = new java.util.ArrayDeque<>();
     private final Handler handler = new Handler(Looper.getMainLooper());
     private PopupWindow popup;
     private TextView text;
 
-    GameDiagnosticsPanel(GameActivity activity) { this.activity = activity; }
+    GameDiagnosticsPanel(GameActivity activity, boolean nativeTrace) {
+        this.activity = activity;
+        this.nativeTrace = nativeTrace;
+    }
 
     void start() {
         if (popup != null) return;
@@ -60,7 +67,15 @@ final class GameDiagnosticsPanel {
             long pss = Debug.getPss();
             text.setText(activity.getString(R.string.graphics_overlay_summary,
                     mode.getPhysicalWidth(), mode.getPhysicalHeight(), pss, DeviceMemory.pageBytes()));
-            if (BuildConfig.WINDOW_PROBE) text.append("\n" + activity.sampleNativeWindow());
+            if (nativeTrace) {
+                String graphics = NativeWindowProbe.readGraphics().trim();
+                if (!graphics.isEmpty()) {
+                    text.append("\n" + graphics.split("\n", 2)[0]);
+                    if (history.size() == 90) history.removeFirst();
+                    history.addLast(android.os.SystemClock.elapsedRealtime() + " ms | " + text.getText() + "\n" + graphics);
+                    activity.getSharedPreferences(PREFS, 0).edit().putString(TRACE, String.join("\n\n", history)).apply();
+                }
+            } else if (BuildConfig.WINDOW_PROBE) text.append("\n" + activity.sampleNativeWindow());
             handler.postDelayed(this, 1000);
         }
     };

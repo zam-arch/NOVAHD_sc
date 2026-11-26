@@ -44,6 +44,7 @@
  * GL calls come from the game's render thread only, so the tracked state needs no lock.
  */
 #include <stdio.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -360,6 +361,15 @@ static int frame_3d; /* a 3D scene was drawn in this frame: the 2D elements afte
 static int hud_seen, hud_on, hud_gone;
 static int present_w, present_h;
 static int present_failed;
+static E packed_status, depth_status;
+#ifdef NOVA_FRAME_LOG
+static atomic_int trace_enabled;
+static atomic_int cull_override;
+void rt_gl_configure_diagnostics(int enabled, int cull) {
+    atomic_store(&trace_enabled, enabled != 0);
+    atomic_store(&cull_override, cull >= 0 && cull <= 2 ? cull : 0);
+}
+#endif
 
 /* Shared by creation and resize. D16 cannot retain a stencil attachment. */
 static E present_depth(T_glRenderbufferStorageOES storage, T_glFramebufferRenderbufferOES attach,
@@ -368,12 +378,14 @@ static E present_depth(T_glRenderbufferStorageOES storage, T_glFramebufferRender
     attach(0x8D40, 0x8D00 /* DEPTH_ATTACHMENT */, GL_RENDERBUFFER_OES, present_ds);
     attach(0x8D40, 0x8D20 /* STENCIL_ATTACHMENT */, GL_RENDERBUFFER_OES, present_ds);
     E status = check(0x8D40);
+    packed_status = status;
     if (status != GL_FRAMEBUFFER_COMPLETE_OES) {
         rt_log("gl: packed depth/stencil framebuffer incomplete (%#x); trying D16", status);
         attach(0x8D40, 0x8D20, GL_RENDERBUFFER_OES, 0);
         storage(GL_RENDERBUFFER_OES, 0x81A5 /* DEPTH_COMPONENT16 */, width, height);
         status = check(0x8D40);
     }
+    depth_status = status;
     return status;
 }
 
@@ -641,7 +653,14 @@ void rt_gl_measure_render(int *width, int *height) {
 }
 #endif
 
+#ifdef NOVA_FRAME_LOG
+static void trace_gl_frame(void);
+#endif
+
 void rt_gl_present(void) {
+#ifdef NOVA_FRAME_LOG
+    if (atomic_load(&trace_enabled)) trace_gl_frame();
+#endif
     if (present_fbo) { present_blit(); present_resize(); } /* the blit swaps */
     else rt_platform_swap();
     memcpy(hit_last, hit_cur, sizeof hit_cur[0] * (size_t)hit_cur_n);
@@ -649,7 +668,7 @@ void rt_gl_present(void) {
     hit_cur_n = 0;
     /* a few frames of grace: an effect drawn over the pause button for a moment must not shrink the controls
      * under the player's thumbs */
-    hud_gone = hud_seen ? 0 : hud_gone + 1;
+    hud_gone = hud_seen ? 0 : (hud_gone < 4 ? hud_gone + 1 : 4);
     hud_on = hud_gone < 4;
     hud_seen = 0;
     frame_3d = 0;
@@ -696,8 +715,49 @@ IMP(glVertexPointer) {
 IMP(glTexCoordPointer) { T_glTexCoordPointer f = F(glTexCoordPointer); if (f) f((I)A(0), A(1), (I)A(2), array_ptr(A(3))); }
 IMP(glColorPointer) { T_glColorPointer f = F(glColorPointer); if (f) f((I)A(0), A(1), (I)A(2), array_ptr(A(3))); }
 IMP(glNormalPointer) { T_glNormalPointer f = F(glNormalPointer); if (f) f(A(0), (I)A(1), array_ptr(A(2))); }
-IMP(glDrawElements) { T_glDrawElements f = F(glDrawElements); if (!wide_apply(2, A(0), 0, (I)A(1), A(2), index_ptr(A(3))) && f) f(A(0), (I)A(1), A(2), index_ptr(A(3))); }
-IMP(glDrawArrays) { T_glDrawArrays f = F(glDrawArrays); if (!wide_apply(1, A(0), (I)A(1), (I)A(2), 0, NULL) && f) f(A(0), (I)A(1), (I)A(2)); }
+#ifdef NOVA_FRAME_LOG
+static E guest_front_face = 0x0901; /* GL_CCW default */
+static int cull_begin(void) {
+    int mode = atomic_load(&cull_override);
+    if (!mode || !*cap_slot(0x0B44)) return 0;
+    T_glDisable disable = F(glDisable);
+    T_glFrontFace front = F(glFrontFace);
+    if (mode == 1 && disable && F(glEnable)) disable(0x0B44);
+    else if (mode == 2 && front) front(guest_front_face == 0x0901 ? 0x0900 : 0x0901);
+    else return 0;
+    return mode;
+}
+
+static void cull_end(int mode) {
+    if (mode == 1) F(glEnable)(0x0B44);
+    else if (mode == 2) F(glFrontFace)(guest_front_face);
+}
+#endif
+
+IMP(glDrawElements) {
+    T_glDrawElements draw = F(glDrawElements);
+    const void *indices = index_ptr(A(3));
+#ifdef NOVA_FRAME_LOG
+    int override = cull_begin();
+#endif
+    if (!wide_apply(2, A(0), 0, (I)A(1), A(2), indices) && draw)
+        draw(A(0), (I)A(1), A(2), indices);
+#ifdef NOVA_FRAME_LOG
+    cull_end(override);
+#endif
+}
+
+IMP(glDrawArrays) {
+    T_glDrawArrays draw = F(glDrawArrays);
+#ifdef NOVA_FRAME_LOG
+    int override = cull_begin();
+#endif
+    if (!wide_apply(1, A(0), (I)A(1), (I)A(2), 0, NULL) && draw)
+        draw(A(0), (I)A(1), (I)A(2));
+#ifdef NOVA_FRAME_LOG
+    cull_end(override);
+#endif
+}
 IMP(glEnableClientState) { T_glEnableClientState f = F(glEnableClientState); if (f) f(A(0)); }
 IMP(glDisableClientState) { T_glDisableClientState f = F(glDisableClientState); if (f) f(A(0)); }
 /* A texture unit the host does not have is not passed on: a driver answers GL_INVALID_ENUM and stays on the unit it
@@ -985,6 +1045,50 @@ static int wide_apply(int kind, E mode, I first, I count, E itype, const void *i
     wide_set(&p);
     return 0;
 }
+
+#ifdef NOVA_FRAME_LOG
+static void trace_gl_frame(void) {
+    static int prior_hud = -1, prior_seen = -1;
+    static unsigned tick;
+    if (++tick % 15 && prior_hud == hud_on && prior_seen == hud_seen) return;
+    prior_hud = hud_on;
+    prior_seen = hud_seen;
+    T_glGetIntegerv gi = F(glGetIntegerv);
+    T_glGetFloatv gf = F(glGetFloatv);
+    T_glGetBooleanv gb = F(glGetBooleanv);
+    if (!gi || !gf || !gb) return;
+    I viewport[4], scissor[4], fbo, cull, front, depth_func, depth_bits, stencil_bits;
+    float projection[16], modelview[16], depth_range[2];
+    uint8_t depth_mask;
+    gi(0x0BA2, viewport);
+    gi(0x0C10, scissor);
+    gi(GL_FRAMEBUFFER_BINDING_OES, &fbo);
+    gi(0x0B45, &cull);
+    gi(0x0B46, &front);
+    gi(0x0B74, &depth_func);
+    gi(0x0D56, &depth_bits);
+    gi(0x0D57, &stencil_bits);
+    gb(0x0B72, &depth_mask);
+    gf(0x0BA6, modelview);
+    gf(0x0BA7, projection);
+    gf(0x0B70, depth_range);
+    char line[480];
+    snprintf(line, sizeof line,
+             "HUD %d/%d hit %d | logical %dx%d FBO %d (%dx%d) packed=%x final=%x\n"
+             "VP iOS %d,%d,%d,%d GL %d,%d,%d,%d | SC %d %d,%d,%d,%d\n"
+             "P %g,%g,%g,%g MV %g,%g,%g,%g | cull %d/%x/%x mode=%d\n"
+             "depth %d/%d/%x range %.2f:%.2f stencil %d bits %d/%d",
+             hud_on, hud_seen, hit_cur_n, drawable_w, drawable_h, fbo, present_w, present_h, packed_status, depth_status,
+             game_vp[0], game_vp[1], game_vp[2], game_vp[3], viewport[0], viewport[1], viewport[2], viewport[3],
+             *cap_slot(0x0C11), scissor[0], scissor[1], scissor[2], scissor[3],
+             projection[0], projection[5], projection[11], projection[15],
+             modelview[0], modelview[5], modelview[10], modelview[15],
+             *cap_slot(0x0B44), cull, front, atomic_load(&cull_override), *cap_slot(0x0B71), depth_mask,
+             depth_func, depth_range[0], depth_range[1], *cap_slot(0x0B90), depth_bits, stencil_bits);
+    rt_platform_graphics_sample(line);
+    rt_log("graphics %s", line);
+}
+#endif
 
 /* ---- framebuffers and renderbuffers (the drawable) ----------------------------------------------------------------- */
 IMP(glGenFramebuffersOES) { gen_names(F(glGenFramebuffersOES), (I)A(0), A(1)); }
@@ -1456,7 +1560,14 @@ IMP(glDepthFunc) { T_glDepthFunc f = F(glDepthFunc); if (f) f(A(0)); }
 IMP(glDepthMask) { T_glDepthMask f = F(glDepthMask); if (f) f(B(0)); }
 IMP(glDepthRangef) { T_glDepthRangef f = F(glDepthRangef); if (f) f(FA(0), FA(1)); }
 IMP(glFlush) { T_glFlush f = F(glFlush); if (f) f(); }
-IMP(glFrontFace) { T_glFrontFace f = F(glFrontFace); if (f) f(A(0)); }
+IMP(glFrontFace) {
+    T_glFrontFace f = F(glFrontFace);
+    E face = A(0);
+#ifdef NOVA_FRAME_LOG
+    if (face == 0x0900 || face == 0x0901) guest_front_face = face;
+#endif
+    if (f) f(face);
+}
 IMP(glHint) { T_glHint f = F(glHint); if (f) f(A(0), A(1)); }
 IMP(glLineWidth) { T_glLineWidth f = F(glLineWidth); if (f) f(FA(0)); }
 IMP(glPointSize) { T_glPointSize f = F(glPointSize); if (f) f(FA(0)); }

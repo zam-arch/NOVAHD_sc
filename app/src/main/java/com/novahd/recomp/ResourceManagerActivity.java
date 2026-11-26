@@ -156,6 +156,19 @@ public final class ResourceManagerActivity extends AppCompatActivity {
         CheckBox overlay = content.findViewById(R.id.graphicsOverlay);
         overlay.setChecked(getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE)
                 .getBoolean(GameDiagnosticsPanel.ENABLED, false));
+        android.widget.Spinner culling = content.findViewById(R.id.graphicsCulling);
+        culling.setVisibility(BuildConfig.REBUILT_ENGINE ? View.VISIBLE : View.GONE);
+        int selected = getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE)
+                .getInt(GameDiagnosticsPanel.CULLING, 0);
+        culling.setSelection(selected >= 0 && selected <= 2 ? selected : 0);
+        View copyTrace = content.findViewById(R.id.copyGraphicsTrace);
+        String trace = getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE).getString(GameDiagnosticsPanel.TRACE, "");
+        copyTrace.setVisibility(trace.isEmpty() ? View.GONE : View.VISIBLE);
+        copyTrace.setOnClickListener(view -> {
+            android.content.ClipboardManager clipboard = getSystemService(android.content.ClipboardManager.class);
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NOVA HD GLES", trace));
+            android.widget.Toast.makeText(this, R.string.trace_copied, android.widget.Toast.LENGTH_SHORT).show();
+        });
         AlertDialog dialog = new MaterialAlertDialogBuilder(this).setTitle(R.string.settings_title)
                 .setView(content).setNegativeButton(android.R.string.cancel, null)
                 .setNeutralButton(R.string.device_diagnostics, (dialogInterface, which) ->
@@ -165,7 +178,8 @@ public final class ResourceManagerActivity extends AppCompatActivity {
             try {
                 manager.setSource(input.getText().toString().trim());
                 getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE).edit()
-                        .putBoolean(GameDiagnosticsPanel.ENABLED, overlay.isChecked()).apply();
+                        .putBoolean(GameDiagnosticsPanel.ENABLED, overlay.isChecked())
+                        .putInt(GameDiagnosticsPanel.CULLING, culling.getSelectedItemPosition()).apply();
                 dialog.dismiss();
             } catch (IOException error) {
                 input.setError(error.getMessage());
