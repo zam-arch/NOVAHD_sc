@@ -32,7 +32,7 @@ import time
 import zipfile
 from pathlib import Path
 
-from relink_inputs import export, restore
+from relink_inputs import digest, export, restore
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = "com.novahd.recomp"
@@ -123,6 +123,7 @@ def main():
     inputs.add_argument("--exe", type=Path, help="the original NovaHD executable (Mach-O)")
     inputs.add_argument("--relink-inputs", type=Path, help="private bundle exported from a matching Android build")
     ap.add_argument("--export-relink-inputs", type=Path, help="save exact translated objects and image metadata")
+    ap.add_argument("--expected-image-sha256", help="reject a packed image that differs from the approved build")
     ap.add_argument("--frame-log", action="store_true", help="log native swap timing and resolutions")
     ap.add_argument("--out", type=Path, default=Path("build/apk"))
     ap.add_argument("--checked", action="store_true", help="RECOMP_CHECKED translated code and runtime")
@@ -158,11 +159,19 @@ def main():
     if args.exe:
         run([sys.executable, ROOT / "tools/recomp/pack_image.py", "--exe", args.exe, "--out", out])
 
+    def check_image():
+        if args.expected_image_sha256 and digest(out / "image.bin") != args.expected_image_sha256.lower():
+            ap.error("Packed image SHA-256 differs from the approved build")
+
+    if args.exe:
+        check_image()
+
     opt = ["-O1", "-fPIC", "-g0", "-DRECOMP_CHECKED"] if args.checked else ["-O2", "-fPIC", "-g0"]
     work = Path("build/recomp-android" + ("-checked" if args.checked else ""))
     if args.relink_inputs:
         try:
             objs = restore(args.relink_inputs, out, triple, args.checked, ndk.name)
+            check_image()
         except (OSError, ValueError, KeyError, TypeError) as error:
             ap.error(f"Cannot relink: {error}")
     elif args.runtime_only:

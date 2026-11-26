@@ -2,7 +2,7 @@ name: Build N.O.V.A. HD APK (ARM64)
 
 on:
   push:
-    branches: [development, recovery/v0.5, recovery/prebuilt-arm64, recovery/v0.6, recovery/v0.7, recovery/v0.8]
+    branches: [development, recovery/v0.5, recovery/prebuilt-arm64, recovery/v0.6, recovery/v0.7, recovery/v0.8, recovery/v0.8.1]
   pull_request:
     branches: [development]
   workflow_dispatch:
@@ -53,6 +53,9 @@ jobs:
       - name: Test native memory, framebuffer and relink contract
         run: bash tests/check-native-v08.sh
 
+      - name: Check IPA preflight and native interposition boundaries
+        run: bash tests/check-recovery-v081.sh
+
       - name: Ensure Gradle refuses an incomplete APK
         run: |
           if gradle :app:assembleDebug --no-daemon > "$RUNNER_TEMP/verify-inputs.log" 2>&1; then
@@ -90,6 +93,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
+          cache-disabled: true
 
       - name: Verify and prepare the authorized original
         env:
@@ -102,21 +106,10 @@ jobs:
           }
           ipa="$RUNNER_TEMP/original.ipa"
           curl --fail --silent --proto '=https' --connect-timeout 15 --max-time 600 --retry 3 --max-filesize 536870912 -o "$ipa" -- "$SOURCE_IPA"
-          printf '%s  %s\n' "$SOURCE_SHA" "$ipa" | sha256sum -c -
-          python tools/recomp/prepare_recovery.py "$ipa" app/src/main/assets/campaign.tsv "$RUNNER_TEMP/NovaHD" build/recovery/android/assets
-          rm -f "$ipa"
-
-      - name: Recompile original ARM code and stage ARM64 engine
-        run: |
           python -m pip install -r tools/recomp/recovery-requirements.txt
-          python tools/recomp/build_apk.py --exe "$RUNNER_TEMP/NovaHD" --out build/recovery/native --native-only --ndk-version "$NDK_VERSION"
-          printf '%s  %s\n' "$IMAGE_SHA256" build/recovery/native/image.bin | sha256sum -c -
-          ndk_bin="$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          "$ndk_bin/llvm-readelf" --dyn-syms --wide build/recovery/native/libnovahd.so > "$RUNNER_TEMP/engine-symbols"
-          grep -F ANativeActivity_onCreate "$RUNNER_TEMP/engine-symbols"
-          mkdir -p build/recovery/android/{jni/arm64-v8a,assets}
-          cp build/recovery/native/libnovahd.so build/recovery/android/jni/arm64-v8a/
-          cp build/recovery/native/image.bin build/recovery/android/assets/
+          python tools/recomp/import_recovery_ipa.py "$ipa" --sha256 "$SOURCE_SHA" \
+            --out build/recovery-import --ndk-version "$NDK_VERSION"
+          rm -f "$ipa"
 
       - name: Assemble and verify the complete Recovery APK
         env:
@@ -125,22 +118,34 @@ jobs:
           NOVA_SIGNING_ALIAS: ${{ secrets.NOVA_SIGNING_ALIAS }}
           NOVA_SIGNING_KEY_PASSWORD: ${{ secrets.NOVA_SIGNING_KEY_PASSWORD }}
         run: |
-          if [[ -n "$KEYSTORE_B64" ]]; then
-            umask 077
-            export NOVA_SIGNING_KEYSTORE="$RUNNER_TEMP/recovery.keystore"
-            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$NOVA_SIGNING_KEYSTORE"
+          if [[ -z "$KEYSTORE_B64" ]]; then
+            echo "::error::The existing experimental signing keystore is required to preserve upgrades."
+            exit 1
           fi
-          gradle :app:assembleRelease --no-daemon
+          umask 077
+          export NOVA_SIGNING_KEYSTORE="$RUNNER_TEMP/recovery.keystore"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$NOVA_SIGNING_KEYSTORE"
+          gradle :app:assembleRelease --no-daemon -PnovaNativeRecovery=true \
+            -PnovaNativeDir=../build/recovery-import/android
           apk=app/build/outputs/apk/release/app-release.apk
           python tools/recomp/verify_recovery_apk.py "$apk" "$IMAGE_SHA256"
-          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --print-certs "$apk"
+          signer=$("$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --print-certs "$apk" |
+            sed -n 's/^Signer #[0-9]* certificate SHA-256 digest: //p')
+          test "$signer" = ce235f8d30539f6d344c692983caf309dde2bdb915120c23d0ba23797076d035
           mkdir -p build/recovery/delivery
-          cp "$apk" build/recovery/delivery/NOVA-HD-android-0.5-recovery.apk
-          (cd build/recovery/delivery && sha256sum NOVA-HD-android-0.5-recovery.apk > SHA256SUMS)
+          cp "$apk" build/recovery/delivery/NOVA-HD-android-0.8.1-recovery.apk
+          (cd build/recovery/delivery && sha256sum NOVA-HD-android-0.8.1-recovery.apk > SHA256SUMS)
 
       - uses: actions/upload-artifact@v4
         with:
-          name: nova-hd-android-0.5-recovery-arm64
+          name: nova-hd-android-0.8.1-recovery-arm64
           path: build/recovery/delivery/
           if-no-files-found: error
           retention-days: 3
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nova-hd-relink-inputs-private
+          path: build/recovery-import/relink-inputs/
+          if-no-files-found: error
+          retention-days: 7

@@ -26,6 +26,12 @@ python3 tools/recomp/build_apk.py --relink-inputs "$scratch/inputs" --out "$scra
   --ndk-version "$ndk" --native-only --frame-log
 "$bin/llvm-readelf" --dyn-syms "$scratch/link/libnovahd.so" > "$scratch/symbols"
 grep -E 'ANativeActivity_onCreate|rt_gl_measure_render' "$scratch/symbols"
+if python3 tools/recomp/build_apk.py --relink-inputs "$scratch/inputs" --out "$scratch/reject-image" \
+    --ndk-version "$ndk" --native-only --expected-image-sha256 "$(printf '%064d' 0)" > "$scratch/image-error" 2>&1; then
+    exit 1
+fi
+grep -F 'Packed image SHA-256 differs from the approved build' "$scratch/image-error"
+test ! -e "$scratch/reject-image/libnovahd.so"
 printf 'tampered' >> "$scratch/inputs/shard.o"
 if python3 tools/recomp/build_apk.py --relink-inputs "$scratch/inputs" --out "$scratch/reject" \
     --ndk-version "$ndk" --native-only > "$scratch/error" 2>&1; then

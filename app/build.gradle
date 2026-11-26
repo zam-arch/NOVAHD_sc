@@ -6,6 +6,7 @@ plugins {
 def nativeInput = layout.projectDirectory.dir(
     providers.gradleProperty("novaNativeDir").getOrElse("../build/recovery/android"))
 def officialEngine = providers.gradleProperty("novaOfficialEngine").orElse("false").get().toBoolean()
+def nativeRecovery = providers.gradleProperty("novaNativeRecovery").orElse("false").get().toBoolean()
 def recoveryKeystore = providers.environmentVariable("NOVA_SIGNING_KEYSTORE").orNull
 
 android {
@@ -17,8 +18,8 @@ android {
         applicationId "com.novahd.recomp"
         minSdk 26
         targetSdk 34
-        versionCode 7
-        versionName(officialEngine ? "0.7-recovery-arm64-4k" : "0.7-recovery")
+        versionCode(nativeRecovery ? 8 : 7)
+        versionName(nativeRecovery ? "0.8.1-recovery" : (officialEngine ? "0.7-recovery-arm64-4k" : "0.7-recovery"))
         buildConfigField "boolean", "OFFICIAL_ENGINE", officialEngine.toString()
         
         ndk {

@@ -3,11 +3,40 @@
 import argparse
 import hashlib
 import shutil
+import struct
 from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
 PREFIX = "Payload/NovaHD.app/"
 ARCHIVE_LIMIT = 512 * 1024 * 1024
+
+
+def verify_macho(source, file_size: int) -> None:
+    header = source.read(28)
+    if (len(header) != 28 or header[:12] != bytes.fromhex("cefaedfe0c00000006000000")
+            or header[12:16] != bytes.fromhex("02000000")):
+        raise ValueError("Expected a thin armv6 Mach-O executable")
+    ncmds, size = struct.unpack_from("<II", header, 16)
+    if not ncmds or size > file_size - 28 or ncmds > size // 8:
+        raise ValueError("Invalid Mach-O load-command table")
+    commands = source.read(size)
+    if len(commands) != size:
+        raise ValueError("Incomplete Mach-O load-command table")
+    offset = 0
+    for _ in range(ncmds):
+        if size - offset < 8:
+            raise ValueError("Truncated Mach-O load command")
+        cmd, length = struct.unpack_from("<II", commands, offset)
+        if length < 8 or length % 4 or length > size - offset:
+            raise ValueError("Invalid Mach-O load-command size")
+        if cmd == 0x21:  # LC_ENCRYPTION_INFO in a 32-bit Mach-O
+            if length < 20:
+                raise ValueError("Truncated LC_ENCRYPTION_INFO")
+            if struct.unpack_from("<I", commands, offset + 16)[0] != 0:
+                raise ValueError("Encrypted Mach-O (cryptid != 0); an authorized unencrypted copy is required")
+        offset += length
+    if offset != size:
+        raise ValueError("Mach-O load-command table length mismatch")
 
 
 def prepare(ipa: Path, manifest: Path, destination: Path, assets: Path) -> None:
@@ -19,10 +48,7 @@ def prepare(ipa: Path, manifest: Path, destination: Path, assets: Path) -> None:
         if names.count(name) != 1 or not 0 < archive.getinfo(name).file_size <= 32 * 1024 * 1024:
             raise ValueError("The IPA must contain the original iPad executable at " + name)
         with archive.open(name) as source:
-            header = source.read(28)
-            if (header[:12] != bytes.fromhex("cefaedfe0c00000006000000")
-                    or header[12:16] != bytes.fromhex("02000000")):
-                raise ValueError("Expected a thin armv6 Mach-O executable")
+            verify_macho(source, archive.getinfo(name).file_size)
             source.seek(0)
             destination.parent.mkdir(parents=True, exist_ok=True)
             with destination.open("wb") as output:
