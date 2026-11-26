@@ -16,7 +16,7 @@ from stage_official_apk import IMAGE_SHA
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def run(ipa: Path, expected_sha: str, output: Path, ndk: str) -> None:
+def run(ipa: Path, expected_sha: str, output: Path, ndk: str, runtime_dir: Path = ROOT / "runtime", translation_dir: Path | None = None) -> None:
     if not re.fullmatch(r"[a-fA-F0-9]{64}", expected_sha):
         raise ValueError("Supply the expected 64-character IPA SHA-256")
     if ipa.stat().st_size > ARCHIVE_LIMIT:
@@ -33,10 +33,13 @@ def run(ipa: Path, expected_sha: str, output: Path, ndk: str) -> None:
         native = scratch / "native"
         exe = scratch / "NovaHD"
         prepare(ipa, ROOT / "app/src/main/assets/campaign.tsv", exe, android_assets)
-        subprocess.run([sys.executable, str(ROOT / "tools/recomp/build_apk.py"),
+        command = [sys.executable, str(ROOT / "tools/recomp/build_apk.py"),
                         "--exe", str(exe), "--native-only", "--out", str(native), "--ndk-version", ndk,
                         "--expected-image-sha256", IMAGE_SHA, "--export-relink-inputs",
-                        str(result / "relink-inputs")], cwd=ROOT, check=True)
+                        str(result / "relink-inputs"), "--runtime-dir", str(runtime_dir)]
+        if translation_dir is not None:
+            command.extend(["--translation-dir", str(translation_dir)])
+        subprocess.run(command, cwd=ROOT, check=True)
         library = result / "android/jni/arm64-v8a"
         library.mkdir(parents=True)
         shutil.move(native / "libnovahd.so", library)
@@ -50,8 +53,11 @@ if __name__ == "__main__":
     parser.add_argument("--sha256", required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--ndk-version", default="28.2.13676358")
+    parser.add_argument("--runtime-dir", type=Path, default=ROOT / "runtime")
+    parser.add_argument("--translation-dir", type=Path)
     args = parser.parse_args()
     try:
-        run(args.ipa.resolve(), args.sha256, args.out.resolve(), args.ndk_version)
+        run(args.ipa.resolve(), args.sha256, args.out.resolve(), args.ndk_version,
+            args.runtime_dir.resolve(), args.translation_dir.resolve() if args.translation_dir else None)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"Import failed: {error}\n")

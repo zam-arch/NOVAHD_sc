@@ -8,8 +8,12 @@ def nativeInput = layout.projectDirectory.dir(
 def officialEngine = providers.gradleProperty("novaOfficialEngine").orElse("false").get().toBoolean()
 def nativeRecovery = providers.gradleProperty("novaNativeRecovery").orElse("false").get().toBoolean()
 def windowProbe = providers.gradleProperty("novaWindowProbe").orElse("false").get().toBoolean()
-if (windowProbe && (!officialEngine || nativeRecovery)) {
-    throw new GradleException("The 0.8.2 probe requires the official 4 KiB engine.")
+def rebuiltEngine = providers.gradleProperty("novaRebuiltEngine").orElse("false").get().toBoolean()
+if (rebuiltEngine && (!nativeRecovery || officialEngine)) {
+    throw new GradleException("The 0.9 APK requires the rebuilt runtime and private bundled assets.")
+}
+if (windowProbe && !(officialEngine || rebuiltEngine)) {
+    throw new GradleException("The probe requires the official or rebuilt 4 KiB engine.")
 }
 def recoveryKeystore = providers.environmentVariable("NOVA_SIGNING_KEYSTORE").orNull
 
@@ -22,10 +26,11 @@ android {
         applicationId "com.novahd.recomp"
         minSdk 26
         targetSdk 34
-        versionCode(windowProbe ? 9 : (nativeRecovery ? 8 : 7))
-        versionName(windowProbe ? "0.8.2-probe-arm64-4k" : nativeRecovery ? "0.8.1-recovery" : (officialEngine ? "0.7-recovery-arm64-4k" : "0.7-recovery"))
+        versionCode(rebuiltEngine ? 10 : windowProbe ? 9 : (nativeRecovery ? 8 : 7))
+        versionName(rebuiltEngine ? "0.9-recovery-arm64-4k" : windowProbe ? "0.8.2-probe-arm64-4k" : nativeRecovery ? "0.8.1-recovery" : (officialEngine ? "0.7-recovery-arm64-4k" : "0.7-recovery"))
         buildConfigField "boolean", "OFFICIAL_ENGINE", officialEngine.toString()
         
+        buildConfigField "boolean", "FOUR_KIB_ONLY", (officialEngine || rebuiltEngine).toString()
         buildConfigField "boolean", "WINDOW_PROBE", windowProbe.toString()
 
         ndk {

@@ -30,6 +30,7 @@ echo "Synthetic Linux interposition: normal import intercepted; explicit dlsym h
 PYTHONPATH=tools/recomp python3 - "$scratch" <<'PY'
 import hashlib
 import io
+import plistlib
 import struct
 import sys
 from pathlib import Path
@@ -62,6 +63,9 @@ reject(lambda: verify_macho(io.BytesIO(b"not Mach-O"), 10), "thin armv6")
 ipa = scratch / "fixture.ipa"
 with ZipFile(ipa, "w") as archive:
     archive.writestr("Payload/NovaHD.app/NovaHD", encrypted)
+    archive.writestr("Payload/NovaHD.app/Info.plist", plistlib.dumps(dict(
+        CFBundleIdentifier="com.gameloft.NovaiPad", CFBundleVersion="1.0.6",
+        CFBundleExecutable="NovaHD", MinimumOSVersion="3.2", UIDeviceFamily=[2])))
 output = scratch / "unpublished"
 reject(lambda: run(ipa, "0" * 64, output, "28.2.13676358"), "IPA SHA-256 mismatch")
 reject(lambda: run(ipa, hashlib.sha256(ipa.read_bytes()).hexdigest(), output, "28.2.13676358"), "cryptid")

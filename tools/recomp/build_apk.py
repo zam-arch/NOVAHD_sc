@@ -124,6 +124,8 @@ def main():
     inputs.add_argument("--relink-inputs", type=Path, help="private bundle exported from a matching Android build")
     ap.add_argument("--export-relink-inputs", type=Path, help="save exact translated objects and image metadata")
     ap.add_argument("--expected-image-sha256", help="reject a packed image that differs from the approved build")
+    ap.add_argument("--runtime-dir", type=Path, default=ROOT / "runtime", help="runtime source directory for reference links")
+    ap.add_argument("--translation-dir", type=Path, help="private translated C and object cache")
     ap.add_argument("--frame-log", action="store_true", help="log native swap timing and resolutions")
     ap.add_argument("--out", type=Path, default=Path("build/apk"))
     ap.add_argument("--checked", action="store_true", help="RECOMP_CHECKED translated code and runtime")
@@ -167,7 +169,7 @@ def main():
         check_image()
 
     opt = ["-O1", "-fPIC", "-g0", "-DRECOMP_CHECKED"] if args.checked else ["-O2", "-fPIC", "-g0"]
-    work = Path("build/recomp-android" + ("-checked" if args.checked else ""))
+    work = args.translation_dir or Path("build/recomp-android" + ("-checked" if args.checked else ""))
     if args.relink_inputs:
         try:
             objs = restore(args.relink_inputs, out, triple, args.checked, ndk.name)
@@ -196,6 +198,7 @@ def main():
                 sources[a] = lifter.lift(f)
             except Unsupported:
                 pass
+        print(f"Translation: {len(sources)}/{len(ents)} entries lifted, {len(ents) - len(sources)} stubs", flush=True)
         objs = compile_objects(image, ents, sources, work, target=(triple, opt, "unused", [clang]), variant="runtime")
     if args.export_relink_inputs:
         export(args.export_relink_inputs, objs, out, triple, args.checked, ndk.name)
@@ -203,7 +206,7 @@ def main():
 
     # the runtime, the glue, image_meta.c
     glue = ndk / "sources/android/native_app_glue"
-    flags = ["-target", triple, "-O2", "-fPIC", "-g", "-Wall", "-Wno-unused-parameter", f"-I{ROOT / 'runtime'}",
+    flags = ["-target", triple, "-O2", "-fPIC", "-g", "-Wall", "-Wno-unused-parameter", f"-I{args.runtime_dir}",
              f"-I{ROOT / 'tools/recomp/runtime'}", f"-I{glue}"] + (["-DRECOMP_CHECKED"] if args.checked else [])
     if args.frame_log:
         flags.append("-DNOVA_FRAME_LOG")
@@ -213,7 +216,7 @@ def main():
     rt_dir.mkdir(exist_ok=True)
     names = runtime_sources()
     print("runtime:", " ".join(names))
-    srcs = [ROOT / "runtime" / f"{n}.c" for n in names] + [out / "image_meta.c", glue / "android_native_app_glue.c"]
+    srcs = [args.runtime_dir / f"{n}.c" for n in names] + [out / "image_meta.c", glue / "android_native_app_glue.c"]
 
     def cc(src):
         obj = rt_dir / (src.stem + ".o")

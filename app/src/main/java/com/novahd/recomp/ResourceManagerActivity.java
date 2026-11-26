@@ -47,7 +47,7 @@ public final class ResourceManagerActivity extends AppCompatActivity {
         eta = findViewById(R.id.etaText);
         progress = findViewById(R.id.progressBar);
         findViewById(R.id.repairButton).setVisibility(View.GONE);
-        ((TextView) findViewById(R.id.versionText)).setText(R.string.about_version);
+        ((TextView) findViewById(R.id.versionText)).setText(BuildConfig.VERSION_NAME);
         detail.setVisibility(View.VISIBLE);
         primary.setOnClickListener(view -> {
             if (manager.ready) {
@@ -116,7 +116,7 @@ public final class ResourceManagerActivity extends AppCompatActivity {
     };
 
     private boolean launchGame() {
-        if (BuildConfig.OFFICIAL_ENGINE && DeviceMemory.pageBytes() != 4096L) {
+        if (BuildConfig.FOUR_KIB_ONLY && DeviceMemory.pageBytes() != 4096L) {
             new MaterialAlertDialogBuilder(this).setMessage(R.string.game_runtime_page_size)
                     .setPositiveButton(android.R.string.ok, null).show();
             return false;

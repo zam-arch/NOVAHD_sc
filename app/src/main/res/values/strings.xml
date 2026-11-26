@@ -36,7 +36,6 @@
     <string name="settings_manifest_url">URL del manifiesto</string>
     <string name="settings_auto_repair">Reparar automáticamente</string>
     <string name="settings_notifications">Notificaciones</string>
-    <string name="about_version">0.7 Recovery</string>
     <string name="about_credits">Basado en NOVA3_sc\nGameloft N.O.V.A. HD (iOS 1.0.6)\nRecompilación estática ARM64</string>
     <string name="import_prompt">Selecciona la carpeta NovaHD.app de tu copia legítima</string>
     <string name="import_not_available">La importación de recursos aún no está disponible en esta compilación.</string>
@@ -45,7 +44,7 @@
     <string name="offline_mode">Modo offline: recursos disponibles</string>
     <string name="game_runtime_missing_title">Motor del juego no disponible</string>
     <string name="game_runtime_missing_message">La instalación no contiene el motor ARM64 o la imagen del juego. Instala un APK Recovery completo.</string>
-    <string name="game_runtime_page_size">Este motor 0.4 requiere páginas de memoria de 4 KiB. La campaña no se puede iniciar en este dispositivo con el motor original.</string>
+    <string name="game_runtime_page_size">Esta compilación experimental requiere páginas de memoria de 4 KiB.</string>
     <string name="device_diagnostics">Diagnóstico</string>
     <string name="graphics_probe_running">Comprobando OpenGL ES en un proceso separado…</string>
     <string name="graphics_copy">Copiar informe</string>

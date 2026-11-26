@@ -2,6 +2,7 @@
 """Verify a legitimate original IPA against the campaign manifest and extract its Mach-O for a private build."""
 import argparse
 import hashlib
+import plistlib
 import shutil
 import struct
 from pathlib import Path, PurePosixPath
@@ -44,6 +45,14 @@ def prepare(ipa: Path, manifest: Path, destination: Path, assets: Path) -> None:
         raise ValueError("IPA exceeds the 512 MiB limit")
     with ZipFile(ipa) as archive:
         names = archive.namelist()
+        info_name = PREFIX + "Info.plist"
+        if names.count(info_name) != 1 or archive.getinfo(info_name).file_size > 1024 * 1024:
+            raise ValueError("Expected a single iPad Info.plist")
+        info = plistlib.loads(archive.read(info_name))
+        expected = dict(CFBundleIdentifier="com.gameloft.NovaiPad", CFBundleVersion="1.0.6",
+                        CFBundleExecutable="NovaHD", MinimumOSVersion="3.2", UIDeviceFamily=[2])
+        if not isinstance(info, dict) or any(info.get(key) != value for key, value in expected.items()):
+            raise ValueError("IPA identity differs from the iPad 1.0.6 reference")
         name = PREFIX + "NovaHD"
         if names.count(name) != 1 or not 0 < archive.getinfo(name).file_size <= 32 * 1024 * 1024:
             raise ValueError("The IPA must contain the original iPad executable at " + name)
