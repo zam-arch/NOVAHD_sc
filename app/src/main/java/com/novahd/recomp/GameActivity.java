@@ -44,6 +44,13 @@ public class GameActivity extends NativeActivity {
         if (overlay) diagnostics = new GameDiagnosticsPanel(this, nativeTrace);
     }
 
+    // Called on the engine thread. Only the synchronized catalog is accessed here.
+    public byte[] readGameMusicCatalog(int grouping) {
+        if (!getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE)
+                .getBoolean(GameDiagnosticsPanel.MUSIC_CATALOG, false)) return null;
+        return MusicLibrary.get(this).catalog(grouping);
+    }
+
     @Override protected void onResume() {
         super.onResume();
         resumed = true;

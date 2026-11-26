@@ -185,6 +185,41 @@ static JNIEnv *jni;
 static jmethodID m_get_wm, m_get_display, m_get_rotation;
 static int rotation_deg = 90; /* the assumed landscape when JNI fails */
 
+char *rt_platform_music_catalog(int grouping, size_t *length) {
+    *length = 0;
+    JavaVM *vm = app_state->activity->vm;
+    JNIEnv *env = NULL;
+    jint state = (*vm)->GetEnv(vm, (void **)&env, JNI_VERSION_1_6);
+    if (state != JNI_OK && (state != JNI_EDETACHED || (*vm)->AttachCurrentThread(vm, &env, NULL) != JNI_OK))
+        return NULL;
+
+    jobject activity = app_state->activity->clazz;
+    jclass cls = (*env)->GetObjectClass(env, activity);
+    jmethodID method = cls ? (*env)->GetMethodID(env, cls, "readGameMusicCatalog", "(I)[B") : NULL;
+    jbyteArray array = method ? (*env)->CallObjectMethod(env, activity, method, (jint)grouping) : NULL;
+    char *result = NULL;
+    if (!(*env)->ExceptionCheck(env) && array) {
+        jsize size = (*env)->GetArrayLength(env, array);
+        if (size > 0 && size <= 512 * 1024) {
+            result = malloc((size_t)size);
+            if (result) {
+                (*env)->GetByteArrayRegion(env, array, 0, size, (jbyte *)result);
+                *length = (size_t)size;
+            }
+        }
+    }
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        free(result);
+        result = NULL;
+        *length = 0;
+    }
+    if (array) (*env)->DeleteLocalRef(env, array);
+    if (cls) (*env)->DeleteLocalRef(env, cls);
+    if (state == JNI_EDETACHED) (*vm)->DetachCurrentThread(vm);
+    return result;
+}
+
 static int jni_check(void) {
     if ((*jni)->ExceptionCheck(jni)) { (*jni)->ExceptionClear(jni); return 0; }
     return 1;

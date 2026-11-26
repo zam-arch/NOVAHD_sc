@@ -156,6 +156,10 @@ public final class ResourceManagerActivity extends AppCompatActivity {
         CheckBox overlay = content.findViewById(R.id.graphicsOverlay);
         overlay.setChecked(getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE)
                 .getBoolean(GameDiagnosticsPanel.ENABLED, false));
+        CheckBox musicCatalog = content.findViewById(R.id.gameMusicCatalog);
+        musicCatalog.setVisibility(BuildConfig.REBUILT_ENGINE ? View.VISIBLE : View.GONE);
+        musicCatalog.setChecked(getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE)
+                .getBoolean(GameDiagnosticsPanel.MUSIC_CATALOG, false));
         android.widget.Spinner culling = content.findViewById(R.id.graphicsCulling);
         culling.setVisibility(BuildConfig.REBUILT_ENGINE ? View.VISIBLE : View.GONE);
         int selected = getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE)
@@ -179,7 +183,8 @@ public final class ResourceManagerActivity extends AppCompatActivity {
                 manager.setSource(input.getText().toString().trim());
                 getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE).edit()
                         .putBoolean(GameDiagnosticsPanel.ENABLED, overlay.isChecked())
-                        .putInt(GameDiagnosticsPanel.CULLING, culling.getSelectedItemPosition()).apply();
+                        .putInt(GameDiagnosticsPanel.CULLING, culling.getSelectedItemPosition())
+                        .putBoolean(GameDiagnosticsPanel.MUSIC_CATALOG, musicCatalog.isChecked()).apply();
                 dialog.dismiss();
             } catch (IOException error) {
                 input.setError(error.getMessage());

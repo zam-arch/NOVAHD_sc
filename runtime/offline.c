@@ -48,6 +48,7 @@
 #endif
 
 #include "rt.h"
+#include "catalog_wire.h"
 
 #define SELF c->r[0]
 #define ARG(k) rt_arg(c, (k) + 2)
@@ -1069,7 +1070,7 @@ M(mu_ipod) { (void)m; RET(ipod_player); }
 M(mu_app) { (void)m; RET(app_player); }
 M(mu_volume) { (void)m; rt_fret(c, 1.0f); }
 
-/* MPMediaQuery: an empty library */
+/* MPMediaQuery: optional Android catalog. */
 static id cls_query;
 typedef struct { id predicates; uint32_t grouping; } query_state;
 static query_state *qs(id x) { return rt_objc_state(x, sizeof(query_state)); }
@@ -1091,8 +1092,9 @@ M(q_predicates) { (void)m; RET(qs(SELF)->predicates); }
 M(q_dealloc) { (void)m; rt_release(c, qs(SELF)->predicates); rt_objc_free(SELF); }
 
 /* MPMediaItemCollection */
-static id cls_collection;
-typedef struct { id items; } coll_state;
+static id cls_collection, cls_playlist, cls_media_item;
+typedef struct { id title, artist, album; } media_item_state;
+typedef struct { id items, name; } coll_state;
 static coll_state *colls(id x) { return rt_objc_state(x, sizeof(coll_state)); }
 M(co_with_items) {
     (void)m;
@@ -1104,7 +1106,102 @@ M(co_init_items) { (void)m; set_retained(c, &colls(SELF)->items, ARG(0)); RET(SE
 M(co_items) { (void)m; RET(colls(SELF)->items); }
 M(co_count) { (void)m; RET(rt_nsarray_count(colls(SELF)->items)); }
 M(co_representative) { (void)m; id it = colls(SELF)->items; RET(rt_nsarray_count(it) ? rt_nsarray_at(it, 0) : 0); }
-M(co_dealloc) { (void)m; rt_release(c, colls(SELF)->items); rt_objc_free(SELF); }
+M(co_dealloc) {
+    (void)m;
+    coll_state *state = colls(SELF);
+    rt_release(c, state->items);
+    rt_release(c, state->name);
+    rt_objc_free(SELF);
+}
+M(co_name) { (void)m; RET(colls(SELF)->name); }
+
+static id media_property(id obj, const char *name) {
+    media_item_state *state = rt_objc_state(obj, sizeof(media_item_state));
+    if (!strcmp(name, "title")) return state->title;
+    if (!strcmp(name, "artist")) return state->artist;
+    if (!strcmp(name, "albumTitle")) return state->album;
+    if (!strcmp(name, "mediaType")) return rt_autorelease(rt_nsnumber_new_int(1));
+    return 0;
+}
+
+M(mi_title) { (void)m; RET(media_property(SELF, "title")); }
+M(mi_artist) { (void)m; RET(media_property(SELF, "artist")); }
+M(mi_album) { (void)m; RET(media_property(SELF, "albumTitle")); }
+M(mi_property) { (void)m; RET(media_property(SELF, rt_nsstring_utf8(ARG(0)))); }
+M(mi_dealloc) {
+    (void)m;
+    media_item_state *state = rt_objc_state(SELF, sizeof(media_item_state));
+    rt_release(c, state->title);
+    rt_release(c, state->artist);
+    rt_release(c, state->album);
+    rt_objc_free(SELF);
+}
+
+M(co_property) {
+    (void)m;
+    const char *property = rt_nsstring_utf8(ARG(0));
+    id items = colls(SELF)->items;
+    if (!strcmp(property, "name")) RET(colls(SELF)->name);
+    else {
+        id representative = rt_nsarray_at(items, 0);
+        RET(representative && rt_is_kind(representative, cls_media_item) ? media_property(representative, property) : 0);
+    }
+}
+
+static id query_catalog(cpu_t *c, const query_state *query, int collections) {
+    id result = rt_nsarray_new(NULL, 0);
+#ifdef __ANDROID__
+    size_t length;
+    char *wire = rt_platform_music_catalog(query->grouping, &length);
+    if (!wire) return rt_autorelease(result);
+    id groups = collections ? rt_nsdict_new() : 0;
+    id seen = !collections && query->grouping == 6 ? rt_nsdict_new() : 0;
+    const char *cursor = wire, *end = wire + length, *fields[TRACK_FIELDS];
+    while (music_catalog_row(&cursor, end, fields)) {
+        if (!fields[TRACK_ID][0]) continue;
+        if (seen) {
+            id key = rt_nsstring_new(fields[TRACK_ID]);
+            int duplicate = rt_nsdict_get(seen, key) != 0;
+            if (!duplicate) rt_nsdict_set(seen, key, key);
+            rt_release(c, key);
+            if (duplicate) continue;
+        }
+        id item = rt_objc_alloc(cls_media_item);
+        media_item_state *state = rt_objc_state(item, sizeof(media_item_state));
+        state->title = rt_nsstring_new(fields[TRACK_TITLE]);
+        state->artist = rt_nsstring_new(fields[TRACK_ARTIST]);
+        state->album = rt_nsstring_new(fields[TRACK_ALBUM]);
+        id items = result;
+        if (groups) {
+            id key = rt_nsstring_new(fields[TRACK_GROUP]);
+            id group = rt_nsdict_get(groups, key);
+            if (!group) {
+                group = rt_objc_alloc(query->grouping == 6 ? cls_playlist : cls_collection);
+                colls(group)->items = rt_nsarray_new(NULL, 0);
+                colls(group)->name = rt_retain(key);
+                rt_nsdict_set(groups, key, group);
+                rt_nsarray_add(result, group);
+                rt_release(c, group);
+            }
+            items = colls(group)->items;
+            rt_release(c, key);
+        }
+        rt_nsarray_add(items, item);
+        rt_release(c, item);
+    }
+    rt_release(c, groups);
+    rt_release(c, seen);
+    free(wire);
+    rt_log("music: grouping %u %s -> %u", query->grouping, collections ? "collections" : "items",
+           rt_nsarray_count(result));
+#else
+    (void)c; (void)query; (void)collections;
+#endif
+    return rt_autorelease(result);
+}
+
+M(q_items) { (void)m; RET(query_catalog(c, qs(SELF), 0)); }
+M(q_collections) { (void)m; RET(query_catalog(c, qs(SELF), 1)); }
 
 /* MPMediaPropertyPredicate */
 static id cls_predicate;
@@ -1378,16 +1475,22 @@ void rt_offline_define(void) {
              {"composersQuery", q_composers}, {"genresQuery", q_genres}, {"playlistsQuery", q_playlists},
              {"podcastsQuery", q_podcasts}, {"audiobooksQuery", q_audiobooks},
              {"compilationsQuery", q_compilations});
-    METHODS(cls_query, {"initWithFilterPredicates:", q_init_preds}, {"items", ret_empty_array},
-            {"collections", ret_empty_array}, {"groupingType", q_grouping}, {"setGroupingType:", q_set_grouping},
+    METHODS(cls_query, {"initWithFilterPredicates:", q_init_preds}, {"items", q_items},
+            {"collections", q_collections}, {"groupingType", q_grouping}, {"setGroupingType:", q_set_grouping},
             {"filterPredicates", q_predicates}, {"dealloc", q_dealloc});
     NOOPS(cls_query, "addFilterPredicate:", "removeFilterPredicate:", "setFilterPredicates:");
 
     cls_collection = def("MPMediaItemCollection", "NSObject", "NSObject");
     CMETHODS(cls_collection, {"collectionWithItems:", co_with_items});
     METHODS(cls_collection, {"initWithItems:", co_init_items}, {"items", co_items}, {"count", co_count},
-            {"representativeItem", co_representative}, {"mediaTypes", ret_zero}, {"valueForProperty:", ret_zero},
+            {"representativeItem", co_representative}, {"mediaTypes", ret_one}, {"valueForProperty:", co_property},
             {"dealloc", co_dealloc});
+
+    cls_playlist = def("MPMediaPlaylist", "MPMediaItemCollection", "MPMediaItemCollection");
+    METHODS(cls_playlist, {"name", co_name});
+    cls_media_item = def("MPMediaItem", "NSObject", "NSObject");
+    METHODS(cls_media_item, {"title", mi_title}, {"artist", mi_artist}, {"albumTitle", mi_album},
+            {"mediaType", ret_one}, {"valueForProperty:", mi_property}, {"dealloc", mi_dealloc});
 
     cls_predicate = def("MPMediaPropertyPredicate", "NSObject", "NSObject");
     CMETHODS(cls_predicate, {"predicateWithValue:forProperty:", pr_with2},

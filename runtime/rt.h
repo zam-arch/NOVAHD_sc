@@ -232,6 +232,9 @@ void rt_platform_run(cpu_t *c);
  * objects on the main thread during the launch and renders on a pthread of its own afterwards; EGL allows a context
  * on one thread at a time, so the main thread gives it up when it enters rt_platform_run. */
 void rt_platform_make_current(void);
+#ifdef __ANDROID__
+char *rt_platform_music_catalog(int grouping, size_t *length); /* malloc-owned UTF-8 rows */
+#endif
 
 /* diagnostics */
 void rt_log(const char *fmt, ...);

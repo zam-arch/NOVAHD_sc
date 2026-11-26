@@ -1,46 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="24dp">
-
-    <TextView
+    android:layout_height="wrap_content">
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/settings_download_url"
-        style="@style/TextAppearance.MaterialComponents.Caption"
-        android:textColor="@color/nova_accent"
-        android:layout_marginBottom="4dp" />
+        android:orientation="vertical"
+        android:padding="24dp">
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/etDownloadUrl"
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="textUri"
-            android:hint="@string/settings_download_url" />
-    </com.google.android.material.textfield.TextInputLayout>
+            android:text="@string/settings_download_url"
+            style="@style/TextAppearance.MaterialComponents.Caption"
+            android:textColor="@color/nova_accent"
+            android:layout_marginBottom="4dp" />
 
-    <CheckBox android:id="@+id/graphicsOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/graphics_overlay_enable" />
-    <Spinner android:id="@+id/graphicsCulling"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:entries="@array/graphics_culling_modes" />
-    <Button android:id="@+id/copyGraphicsTrace"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/copy_graphics_trace" />
-    <Button android:id="@+id/musicLibrary"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Música personalizada" />
-</LinearLayout>
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etDownloadUrl"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textUri"
+                android:hint="@string/settings_download_url" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <CheckBox android:id="@+id/graphicsOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/graphics_overlay_enable" />
+        <Spinner android:id="@+id/graphicsCulling"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:entries="@array/graphics_culling_modes" />
+        <Button android:id="@+id/copyGraphicsTrace"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/copy_graphics_trace" />
+        <CheckBox android:id="@+id/gameMusicCatalog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/game_music_catalog_experiment" />
+        <Button android:id="@+id/musicLibrary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Música personalizada" />
+    </LinearLayout>
+</ScrollView>

@@ -17,6 +17,7 @@ final class GameDiagnosticsPanel {
     static final String PREFS = "game_diagnostics";
     static final String ENABLED = "enabled";
     static final String CULLING = "culling";
+    static final String MUSIC_CATALOG = "music_catalog";
     static final String TRACE = "last_trace";
     private final GameActivity activity;
     private final boolean nativeTrace;

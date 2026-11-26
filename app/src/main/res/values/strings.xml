@@ -57,4 +57,5 @@
         <item>Prueba sin face culling</item>
         <item>Prueba con orientación CW/CCW invertida</item>
     </string-array>
+    <string name="game_music_catalog_experiment">Probar catálogo musical del motor</string>
 </resources>

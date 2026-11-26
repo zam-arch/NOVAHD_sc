@@ -1057,9 +1057,10 @@ static void trace_gl_frame(void) {
     T_glGetFloatv gf = F(glGetFloatv);
     T_glGetBooleanv gb = F(glGetBooleanv);
     if (!gi || !gf || !gb) return;
-    I viewport[4], scissor[4], fbo, cull, front, depth_func, depth_bits, stencil_bits;
-    float projection[16], modelview[16], depth_range[2];
-    uint8_t depth_mask;
+    I viewport[4] = {0}, scissor[4] = {0}, fbo = 0, cull = 0, front = 0, depth_func = 0;
+    I depth_bits = 0, stencil_bits = 0;
+    float projection[16] = {0}, modelview[16] = {0}, depth_range[2] = {0};
+    uint8_t depth_mask = 0;
     gi(0x0BA2, viewport);
     gi(0x0C10, scissor);
     gi(GL_FRAMEBUFFER_BINDING_OES, &fbo);

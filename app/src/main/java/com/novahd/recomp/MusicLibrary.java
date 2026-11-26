@@ -25,11 +25,12 @@ final class MusicLibrary {
     }
 
     static final class Track {
-        final String id, title, artist;
-        Track(String id, String title, String artist) {
+        final String id, title, artist, album;
+        Track(String id, String title, String artist, String album) {
             this.id = id;
             this.title = title;
             this.artist = artist;
+            this.album = album;
         }
         @Override public String toString() { return artist.isEmpty() ? title : title + " — " + artist; }
     }
@@ -48,7 +49,7 @@ final class MusicLibrary {
             JSONArray saved = new JSONArray(preferences.getString("tracks", "[]"));
             for (int i = 0; i < saved.length(); i++) {
                 JSONObject item = saved.getJSONObject(i);
-                Track track = new Track(item.getString("id"), item.getString("title"), item.optString("artist"));
+                Track track = new Track(item.getString("id"), item.getString("title"), item.optString("artist"), item.optString("album"));
                 if (track.id.matches("[0-9a-f-]{36}") && file(track).isFile()) tracks.put(track.id, track);
             }
             JSONObject playlists = new JSONObject(preferences.getString("lists", "{}"));
@@ -78,6 +79,25 @@ final class MusicLibrary {
     }
 
     synchronized List<String> playlists() { return new ArrayList<>(lists.keySet()); }
+
+    synchronized byte[] catalog(int grouping) {
+        List<String[]> rows = new ArrayList<>();
+        if (grouping == 6) {
+            for (String name : lists.keySet()) {
+                for (Track track : tracks(name)) rows.add(catalogRow(name, track));
+            }
+        } else if (grouping == 0 || grouping == 1 || grouping == 2) {
+            for (Track track : tracks.values()) {
+                String group = grouping == 2 ? track.artist : grouping == 1 ? track.album : track.title;
+                rows.add(catalogRow(group, track));
+            }
+        }
+        return MusicCatalog.encode(rows);
+    }
+
+    private static String[] catalogRow(String group, Track track) {
+        return new String[] {group, track.id, track.title, track.artist, track.album};
+    }
 
     synchronized boolean create(String name) {
         if (name.isEmpty() || name.length() > 64 || lists.containsKey(name)) return false;
@@ -150,7 +170,7 @@ final class MusicLibrary {
                 if (bytes == 0) throw new IOException("El archivo está vacío.");
             }
             String title = name == null ? "Canción importada" : name;
-            String artist = "";
+            String artist = "", album = "";
             MediaMetadataRetriever metadata = new MediaMetadataRetriever();
             try (FileInputStream input = new FileInputStream(stage)) {
                 metadata.setDataSource(input.getFD());
@@ -158,6 +178,8 @@ final class MusicLibrary {
                 if (storedTitle != null && !storedTitle.trim().isEmpty()) title = storedTitle;
                 String storedArtist = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
                 if (storedArtist != null) artist = storedArtist;
+                String storedAlbum = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
+                if (storedAlbum != null) album = storedAlbum;
                 if ("yes".equals(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO))
                         || !"yes".equals(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)))
                     throw new IOException("Android no reconoce el documento como una pista de audio.");
@@ -166,7 +188,7 @@ final class MusicLibrary {
             } finally {
                 metadata.release();
             }
-            Track track = new Track(id, title, artist);
+            Track track = new Track(id, title, artist, album);
             if (!stage.renameTo(file(track))) throw new IOException("No se pudo instalar la canción.");
             synchronized (this) {
                 tracks.put(track.id, track);
@@ -182,7 +204,7 @@ final class MusicLibrary {
         JSONObject playlists = new JSONObject();
         try {
             for (Track track : tracks.values()) {
-                songs.put(new JSONObject().put("id", track.id).put("title", track.title).put("artist", track.artist));
+                songs.put(new JSONObject().put("id", track.id).put("title", track.title).put("artist", track.artist).put("album", track.album));
             }
             for (Map.Entry<String, List<String>> list : lists.entrySet())
                 playlists.put(list.getKey(), new JSONArray(list.getValue()));
