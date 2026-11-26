@@ -24,15 +24,21 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
     private final AudioFocusRequest focus;
     private final SharedPreferences preferences;
     private final List<MusicLibrary.Track> selection = new ArrayList<>(), queue = new ArrayList<>();
-    private final Runnable background = this::pause;
     private MediaPlayer media;
     private int foreground, index = -1, volume;
     private boolean prepared, playing, requested, focused, shuffle, repeat, completed;
     private String message = "Selecciona una canción de tu biblioteca.";
     private Runnable listener;
     private volatile String guestSnapshot = "0:";
-    private boolean guestOwnsPlayback;
+    private boolean guestOwnsPlayback, resumeAfterBackground;
     private String rememberedGuestTrack;
+
+    private final Runnable background = () -> {
+        if (foreground == 0 && active()) {
+            pause();
+            resumeAfterBackground = media != null;
+        }
+    };
 
     MusicPlayer(Application app) {
         this.app = app;
@@ -184,6 +190,11 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
         }
     }
 
+    void restoreGameAudio() {
+        rememberGuestTrack("");
+        stop();
+    }
+
     void stop() {
         guestOwnsPlayback = false;
         release();
@@ -270,6 +281,7 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
     }
 
     private void pause() {
+        resumeAfterBackground = false;
         boolean wasActive = active();
         requested = false;
         if (playing && media != null) {
@@ -292,6 +304,7 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
     }
 
     private void release() {
+        resumeAfterBackground = false;
         MediaPlayer old = media;
         media = null;
         prepared = playing = requested = completed = false;
@@ -316,7 +329,12 @@ final class MusicPlayer implements Application.ActivityLifecycleCallbacks {
     }
 
     @Override public void onActivityCreated(Activity activity, Bundle state) {}
-    @Override public void onActivityResumed(Activity activity) {}
+    @Override public void onActivityResumed(Activity activity) {
+        if (activity instanceof GameActivity && resumeAfterBackground) {
+            resumeAfterBackground = false;
+            if (media != null && hasTrack() && !active() && !completed) toggle();
+        }
+    }
     @Override public void onActivityPaused(Activity activity) {}
     @Override public void onActivitySaveInstanceState(Activity activity, Bundle state) {}
     @Override public void onActivityDestroyed(Activity activity) {}

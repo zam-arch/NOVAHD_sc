@@ -25,8 +25,9 @@ public final class LauncherActivity extends Activity {
         super.onCreate(state);
         boolean failed = BuildConfig.REBUILT_ENGINE
                 && getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(BOOT_FAILED, false);
-        if (failed || RECOVERY_ACTION.equals(getIntent().getAction()) || runtimeError(this) != 0) {
-            recover(failed);
+        int error = runtimeError(this);
+        if (failed || RECOVERY_ACTION.equals(getIntent().getAction()) || error != 0) {
+            recover(failed, error);
             return;
         }
         TextView status = new TextView(this);
@@ -54,13 +55,14 @@ public final class LauncherActivity extends Activity {
             } else if (campaign.ready && startGame(LauncherActivity.this)) {
                 finish();
             } else {
-                recover(campaign.ready);
+                recover(campaign.ready, 0);
             }
         }
     };
 
-    private void recover(boolean failed) {
-        startActivity(new Intent(this, ResourceManagerActivity.class).putExtra(BOOT_FAILED, failed));
+    private void recover(boolean failed, int error) {
+        startActivity(new Intent(this, ResourceManagerActivity.class)
+                .putExtra(BOOT_FAILED, failed).putExtra("runtime_error", error));
         finish();
     }
 

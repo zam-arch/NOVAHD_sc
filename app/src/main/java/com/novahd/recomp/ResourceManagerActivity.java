@@ -46,8 +46,11 @@ public final class ResourceManagerActivity extends AppCompatActivity {
         findViewById(R.id.repairButton).setVisibility(View.GONE);
         ((TextView) findViewById(R.id.versionText)).setText(BuildConfig.VERSION_NAME);
         detail.setVisibility(View.VISIBLE);
-        if (getIntent().getBooleanExtra(LauncherActivity.BOOT_FAILED, false))
-            new MaterialAlertDialogBuilder(this).setMessage(R.string.launch_failed)
+        int error = getIntent().getIntExtra("runtime_error", 0);
+        if (error == 0 && getIntent().getBooleanExtra(LauncherActivity.BOOT_FAILED, false))
+            error = R.string.launch_failed;
+        if (error != 0)
+            new MaterialAlertDialogBuilder(this).setMessage(error)
                     .setPositiveButton(android.R.string.ok, null).show();
         primary.setOnClickListener(view -> {
             if (manager.ready) {

@@ -247,6 +247,11 @@ static void confirm_game_boot(void) {
     int detach;
     JNIEnv *env = music_environment(&vm, &detach);
     if (!env) return;
+    if ((*env)->PushLocalFrame(env, 4) < 0) {
+        (*env)->ExceptionClear(env);
+        if (detach) (*vm)->DetachCurrentThread(vm);
+        return;
+    }
     jobject activity = app_state->activity->clazz;
     jclass type = (*env)->GetObjectClass(env, activity);
     jmethodID method = type ? (*env)->GetMethodID(env, type, "onNativeBootConfirmed", "()V") : NULL;
