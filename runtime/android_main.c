@@ -586,7 +586,21 @@ static void render_sync(void) {
 
 #ifdef NOVA_FRAME_LOG
 static pthread_mutex_t diagnostic_mutex = PTHREAD_MUTEX_INITIALIZER;
-static char diagnostic_gl[480], diagnostic_swaps[128];
+static char diagnostic_gl[900], diagnostic_swaps[240];
+enum { GRAPHICS_EVENTS = 12, GRAPHICS_EVENT_SIZE = 256 };
+static char diagnostic_events[GRAPHICS_EVENTS][GRAPHICS_EVENT_SIZE];
+static unsigned diagnostic_event_count, diagnostic_events_dropped;
+
+void rt_platform_graphics_event(const char *details) {
+    struct timespec stamp = {0};
+    clock_gettime(CLOCK_MONOTONIC, &stamp);
+    pthread_mutex_lock(&diagnostic_mutex);
+    if (diagnostic_event_count < GRAPHICS_EVENTS) {
+        snprintf(diagnostic_events[diagnostic_event_count++], GRAPHICS_EVENT_SIZE, "%llu ms %s",
+                 (unsigned long long)stamp.tv_sec * 1000 + stamp.tv_nsec / 1000000, details);
+    } else diagnostic_events_dropped++;
+    pthread_mutex_unlock(&diagnostic_mutex);
+}
 
 void rt_platform_graphics_sample(const char *details) {
     pthread_mutex_lock(&diagnostic_mutex);
@@ -603,27 +617,42 @@ Java_com_novahd_recomp_NativeWindowProbe_configureGraphics(JNIEnv *env, jclass c
 JNIEXPORT jstring JNICALL
 Java_com_novahd_recomp_NativeWindowProbe_readGraphics(JNIEnv *env, jclass cls) {
     (void)cls;
-    char text[sizeof diagnostic_gl + sizeof diagnostic_swaps + 2];
+    char text[sizeof diagnostic_gl + sizeof diagnostic_swaps + sizeof diagnostic_events + 96];
     pthread_mutex_lock(&diagnostic_mutex);
-    snprintf(text, sizeof text, "%s\n%s", diagnostic_swaps, diagnostic_gl);
+    size_t used = (size_t)snprintf(text, sizeof text, "%s\n%s", diagnostic_swaps, diagnostic_gl);
+    for (unsigned i = 0; i < diagnostic_event_count; ++i)
+        used += (size_t)snprintf(text + used, sizeof text - used, "\n%s", diagnostic_events[i]);
+    if (diagnostic_events_dropped)
+        snprintf(text + used, sizeof text - used, "\neventos omitidos: %u", diagnostic_events_dropped);
+    diagnostic_event_count = diagnostic_events_dropped = 0;
     pthread_mutex_unlock(&diagnostic_mutex);
     return (*env)->NewStringUTF(env, text);
+}
+
+static int compare_intervals(const void *left, const void *right) {
+    uint64_t a = *(const uint64_t *)left, b = *(const uint64_t *)right;
+    return (a > b) - (a < b);
 }
 
 /* Timings at successful eglSwapBuffers return. This is submission cadence, not display presentation. */
 static void log_swap_sample(EGLSurface target) {
     static _Thread_local uint64_t previous, start, frames_in_window;
     static _Thread_local EGLSurface previous_target;
+    static _Thread_local uint64_t samples[512], maximum;
+    static _Thread_local unsigned sample_count;
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts)) return;
     uint64_t now = (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
     if (!start || !previous || now - previous > UINT64_C(1000000000) || target != previous_target) {
         start = previous = now;
         previous_target = target;
-        frames_in_window = 0;
+        frames_in_window = sample_count = maximum = 0;
         return;
     }
     frames_in_window++;
+    uint64_t gap = now - previous;
+    if (sample_count < sizeof samples / sizeof samples[0]) samples[sample_count++] = gap;
+    if (gap > maximum) maximum = gap;
     if (now - start >= UINT64_C(1000000000)) {
         EGLint w, h;
         int rw, rh;
@@ -632,14 +661,20 @@ static void log_swap_sample(EGLSurface target) {
         if (rw > 0 && rh > 0) snprintf(render, sizeof render, "%dx%d", rw, rh);
         if (eglQuerySurface(dpy, target, EGL_WIDTH, &w) && eglQuerySurface(dpy, target, EGL_HEIGHT, &h)) {
             double cadence = 1e9 * frames_in_window / (now - start), interval = (now - previous) / 1e6;
+            qsort(samples, sample_count, sizeof samples[0], compare_intervals);
+            double p50 = samples[(sample_count - 1) / 2] / 1e6;
+            double p95 = samples[(sample_count * 95 + 99) / 100 - 1] / 1e6;
             pthread_mutex_lock(&diagnostic_mutex);
             snprintf(diagnostic_swaps, sizeof diagnostic_swaps,
-                     "%.2f swaps/s | intervalo %.2f ms | FBO %s | EGL %dx%d", cadence, interval, render, w, h);
+                     "%.2f swaps/s | ultimo %.2f ms | FBO %s | EGL %dx%d\n"
+                     "swap ms media %.2f p50 %.2f p95 %.2f max %.2f (n=%u)",
+                     cadence, interval, render, w, h, (now - start) / (1e6 * frames_in_window),
+                     p50, p95, maximum / 1e6, sample_count);
             pthread_mutex_unlock(&diagnostic_mutex);
             rt_log("frame: %.2f swaps/s, last %.2f ms, render %s, EGL %dx%d", cadence, interval, render, w, h);
         }
         start = now;
-        frames_in_window = 0;
+        frames_in_window = sample_count = maximum = 0;
     }
     previous = now;
 }

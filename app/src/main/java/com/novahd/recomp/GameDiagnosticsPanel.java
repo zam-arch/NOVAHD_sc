@@ -71,9 +71,10 @@ final class GameDiagnosticsPanel {
             if (nativeTrace) {
                 String graphics = NativeWindowProbe.readGraphics().trim();
                 if (!graphics.isEmpty()) {
+                    String device = text.getText().toString();
                     text.append("\n" + graphics.split("\n", 2)[0]);
-                    if (history.size() == 90) history.removeFirst();
-                    history.addLast(android.os.SystemClock.elapsedRealtime() + " ms | " + text.getText() + "\n" + graphics);
+                    if (history.size() == 30) history.removeFirst();
+                    history.addLast(android.os.SystemClock.elapsedRealtime() + " ms | " + device + "\n" + graphics);
                     activity.getSharedPreferences(PREFS, 0).edit().putString(TRACE, String.join("\n\n", history)).apply();
                 }
             } else if (BuildConfig.WINDOW_PROBE) text.append("\n" + activity.sampleNativeWindow());

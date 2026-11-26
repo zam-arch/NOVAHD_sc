@@ -64,8 +64,7 @@ int main(void) {
     rt_gl_configure_diagnostics(0, 0); assert(cull_begin() == 0);
     rt_gl_configure_diagnostics(0, 1); assert(cull_begin() == 1 && !culling);
     cull_end(1); assert(culling);
-    rt_gl_configure_diagnostics(0, 2); assert(cull_begin() == 2 && face == 0x0900);
-    cull_end(2); assert(face == 0x0901);
+    rt_gl_configure_diagnostics(0, 2); assert(cull_begin() == 0 && face == 0x0901);
     *cap_slot(0x0B44) = 0; assert(cull_begin() == 0);
     present_w = 768; present_h = 1024;
     for (int k = 0; k < 3; ++k) matrices[k][0] = 2.0f + k;
@@ -82,7 +81,13 @@ int main(void) {
         hit_cur_n = 0;
         struct place placement;
         wide_place(0.7f, 0.82f, 0.6f, 0.78f, &placement);
-        assert(placement.sx == placement.sy);
+        assert(placement.sx == 1 && placement.sy == 1);
+        struct place with_hud = placement;
+        hud_on = 0;
+        hit_cur_n = 0;
+        wide_place(0.7f, 0.82f, 0.6f, 0.78f, &placement);
+        assert(!memcmp(&with_hud, &placement, sizeof placement));
+        hud_on = 1;
         if (k) {
             assert(hit_cur_n == 1);
             hit_last[0] = hit_cur[0]; hit_last_n = 1;
@@ -92,7 +97,7 @@ int main(void) {
             rt_gl_wide_touch(y, x, transform);
             assert(fabsf(y * transform[0] + transform[1] - 123) < 0.01f);
             assert(fabsf(x * transform[2] + transform[3] - 123) < 0.01f);
-        } else assert(!hit_cur_n && placement.sx == 1);
+        } else assert(placement.sx == 1);
     }
     puts("HUD fixture preserves scale proportions and inverse touch from 4:3 to 21:9.");
     puts("Blit restores captured matrices and clear color. Cull overrides are scoped and reversible.");

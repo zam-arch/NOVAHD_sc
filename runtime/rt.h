@@ -188,6 +188,7 @@ void rt_gl_bind_drawable(uint32_t renderbuffer, int width, int height); /* that 
 void rt_gl_measure_render(int *width, int *height);
 void rt_gl_configure_diagnostics(int enabled, int cull);
 void rt_platform_graphics_sample(const char *details);
+void rt_platform_graphics_event(const char *details);
 #endif
 void rt_gl_present(void);                           /* called by -presentRenderbuffer: */
 

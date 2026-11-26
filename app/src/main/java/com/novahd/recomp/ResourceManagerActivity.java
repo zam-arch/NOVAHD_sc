@@ -164,7 +164,7 @@ public final class ResourceManagerActivity extends AppCompatActivity {
         culling.setVisibility(BuildConfig.REBUILT_ENGINE ? View.VISIBLE : View.GONE);
         int selected = getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE)
                 .getInt(GameDiagnosticsPanel.CULLING, 0);
-        culling.setSelection(selected >= 0 && selected <= 2 ? selected : 0);
+        culling.setSelection(selected >= 0 && selected <= 1 ? selected : 0);
         View copyTrace = content.findViewById(R.id.copyGraphicsTrace);
         String trace = getSharedPreferences(GameDiagnosticsPanel.PREFS, MODE_PRIVATE).getString(GameDiagnosticsPanel.TRACE, "");
         copyTrace.setVisibility(trace.isEmpty() ? View.GONE : View.VISIBLE);

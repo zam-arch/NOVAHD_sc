@@ -348,12 +348,10 @@ static int wide_dirty, proj_dirty = 1;
 static int wide_apply(int kind, E mode, I first, I count, E itype, const void *idx);
 /* a placement on the layer: Y' = Y * sy + oy along its long axis, X' = X * sx + ox along the short one */
 struct place { float sy, oy, sx, ox; };
-/* the controls of the HUD are drawn larger on a wide screen (a phone is far smaller than the iPad they were sized
- * for); where each enlarged element ended up in the last frame, for the touches on it */
-#define HUD_SCALE 1.6f
+/* Last-frame placement of compact edge elements for exact inverse touch translation. */
 enum { HIT_MAX = 512 };
 /* in screen terms: y0..y1 across, x0..x1 down, t as rt_gl_wide_touch gives it */
-static struct hit { float y0, y1, x0, x1, t[4]; int moved; } hit_cur[HIT_MAX], hit_last[HIT_MAX];
+static struct hit { float y0, y1, x0, x1, t[4]; } hit_cur[HIT_MAX], hit_last[HIT_MAX];
 static int hit_cur_n, hit_last_n;
 static int frame_3d; /* a 3D scene was drawn in this frame: the 2D elements after it are the HUD */
 /* the HUD is up (and not the pause menu or a cutscene over the scene) while its pause button is drawn in the top left
@@ -367,7 +365,7 @@ static atomic_int trace_enabled;
 static atomic_int cull_override;
 void rt_gl_configure_diagnostics(int enabled, int cull) {
     atomic_store(&trace_enabled, enabled != 0);
-    atomic_store(&cull_override, cull >= 0 && cull <= 2 ? cull : 0);
+    atomic_store(&cull_override, cull == 1 ? 1 : 0);
 }
 #endif
 
@@ -666,8 +664,7 @@ void rt_gl_present(void) {
     memcpy(hit_last, hit_cur, sizeof hit_cur[0] * (size_t)hit_cur_n);
     hit_last_n = hit_cur_n;
     hit_cur_n = 0;
-    /* a few frames of grace: an effect drawn over the pause button for a moment must not shrink the controls
-     * under the player's thumbs */
+    /* Track the legacy HUD classification for comparison with 0.10 traces. */
     hud_gone = hud_seen ? 0 : (hud_gone < 4 ? hud_gone + 1 : 4);
     hud_on = hud_gone < 4;
     hud_seen = 0;
@@ -716,21 +713,17 @@ IMP(glTexCoordPointer) { T_glTexCoordPointer f = F(glTexCoordPointer); if (f) f(
 IMP(glColorPointer) { T_glColorPointer f = F(glColorPointer); if (f) f((I)A(0), A(1), (I)A(2), array_ptr(A(3))); }
 IMP(glNormalPointer) { T_glNormalPointer f = F(glNormalPointer); if (f) f(A(0), (I)A(1), array_ptr(A(2))); }
 #ifdef NOVA_FRAME_LOG
-static E guest_front_face = 0x0901; /* GL_CCW default */
 static int cull_begin(void) {
     int mode = atomic_load(&cull_override);
     if (!mode || !*cap_slot(0x0B44)) return 0;
     T_glDisable disable = F(glDisable);
-    T_glFrontFace front = F(glFrontFace);
     if (mode == 1 && disable && F(glEnable)) disable(0x0B44);
-    else if (mode == 2 && front) front(guest_front_face == 0x0901 ? 0x0900 : 0x0901);
     else return 0;
     return mode;
 }
 
 static void cull_end(int mode) {
     if (mode == 1) F(glEnable)(0x0B44);
-    else if (mode == 2) F(glFrontFace)(guest_front_face);
 }
 #endif
 
@@ -822,11 +815,10 @@ void rt_gl_wide_touch(float px, float py, float *t) {
     t[0] = 1; t[1] = 0; t[2] = 1; t[3] = 0;
     if (rt_gl_wide_long <= g) return;
     const struct hit *h = NULL;
-    /* an enlarged element: the smallest one under the finger. One at the regular place of its zone wins over one
-     * that was moved up from the bottom edge (a marker passing over the fire button must not take its touches). */
+    /* Prefer the smallest compact edge element under the finger. */
     for (int k = 0; k < hit_last_n && k < HIT_MAX; k++) {
         const struct hit *c = &hit_last[k];
-        float area = (c->y1 - c->y0) * (c->x1 - c->x0) + (c->moved ? 1e9f : 0);
+        float area = (c->y1 - c->y0) * (c->x1 - c->x0);
         if (px >= c->y0 && px <= c->y1 && py >= c->x0 && py <= c->x1 && area < best) { best = area; h = c; }
     }
     if (h) { memcpy(t, h->t, sizeof h->t); return; }
@@ -888,45 +880,74 @@ static void wide_place(float lo, float hi, float xa, float xb, struct place *p) 
     /* stretched: what spans the screen (backgrounds, bars, fades) and tall pieces of a tiled background; a line of
      * text that happens to reach one edge is not */
     int both = a <= 0.02f && b >= 0.98f, one = a <= 0.02f || b >= 0.98f;
-    float tall = vb - va, side = wide_s((a + b) / 2), s = HUD_SCALE;
+    float tall = vb - va, side = wide_s((a + b) / 2);
     p->sx = 1; p->ox = 0;
-    if (both || (one && b - a >= 0.45f && tall >= 0.25f)) { p->sy = present_h / g; p->oy = 0; return; }
+    if ((both || (one && b - a >= 0.45f)) && tall >= 0.25f) { p->sy = present_h / g; p->oy = 0; return; }
     p->sy = 1; p->oy = (float)(m + (int)(m * side)); /* smaller: same size, moved towards its edge */
-    /* the HUD's controls at the left and right: enlarged from their edge of the screen (as far as its width allows).
-     * Down the screen the upper ones grow from the top; the lower ones (stick, fire) grow about the line at 0.8 of
-     * the height, which lands on the bottom edge, so they come down towards the thumbs. What would still pass the
-     * bottom is moved up to fit. */
-    if (s * g > present_h) s = present_h / g;
-    /* the layer shows turned half round: its long axis runs from the right of the screen to the left */
+    /* A viewport describes arbitrary batches, including captions and scissored UI. Keep its
+     * logical scale fixed even when the old pause-button heuristic changes during a dialogue. */
     if (frame_3d && a > 0.80f && vb < 0.12f && b - a > 0.03f) hud_seen = 1;
-    if (frame_3d && hud_on && fabsf(side) >= 1 && b - a < 0.35f && tall < 0.35f && s > 1.05f) {
-        p->sy = p->sx = s;
-        p->oy = side < 0 ? 0 : present_h - s * g;
-        float base;
-        if ((va + vb) / 2 < 0.45f) { p->ox = base = w * (1 - s); if (s * vb > 1) p->ox += w * (s * vb - 1); }
-        else { p->ox = base = -0.2f * w * s; if (vb > 0.8f) p->ox += w * s * (vb - 0.8f); }
-        if (hit_cur_n < HIT_MAX) {
-            struct hit *h = &hit_cur[hit_cur_n++];
-            h->y0 = present_h - (b * g * s + p->oy) - 12; h->y1 = present_h - (a * g * s + p->oy) + 12;
-            h->x0 = w - ((1 - va) * w * s + p->ox) - 12; h->x1 = w - ((1 - vb) * w * s + p->ox) + 12;
-            h->t[0] = 1 / s; h->t[1] = g - (present_h - p->oy) / s;
-            h->t[2] = 1 / s; h->t[3] = w - (w - p->ox) / s;
-            h->moved = p->ox != base;
-        }
+    if (frame_3d && fabsf(side) >= 1 && b - a < 0.35f && tall < 0.35f && hit_cur_n < HIT_MAX) {
+        struct hit *h = &hit_cur[hit_cur_n++];
+        h->y0 = present_h - (b * g + p->oy) - 12;
+        h->y1 = present_h - (a * g + p->oy) + 12;
+        h->x0 = va * w - 12;
+        h->x1 = vb * w + 12;
+        h->t[0] = 1;
+        h->t[1] = g - present_h + p->oy;
+        h->t[2] = 1;
+        h->t[3] = 0;
     }
 }
 
-static void wide_set(const struct place *p) {
+enum wide_pass { PASS_OFFSCREEN, PASS_CLEAR, PASS_3D, PASS_CLIPPED, PASS_2D, PASS_BATCH, PASS_COUNT };
+
+#ifdef NOVA_FRAME_LOG
+static void trace_wide_pass(enum wide_pass pass, const struct place *place, const I viewport[4], const I scissor[4]) {
+    static const char *const names[] = {"offscreen", "clear", "3D", "scissored", "2D", "2D-batch"};
+    static struct { int valid, hud; uint32_t fb; I vp[4], sc[4]; } last[PASS_COUNT];
+    if (!atomic_load(&trace_enabled)) return;
+    if (last[pass].valid && last[pass].hud == hud_on && last[pass].fb == bound_fb &&
+        !memcmp(last[pass].vp, viewport, sizeof last[pass].vp) &&
+        !memcmp(last[pass].sc, scissor, sizeof last[pass].sc)) return;
+    last[pass].valid = 1;
+    last[pass].hud = hud_on;
+    last[pass].fb = bound_fb;
+    memcpy(last[pass].vp, viewport, sizeof last[pass].vp);
+    memcpy(last[pass].sc, scissor, sizeof last[pass].sc);
+    char line[256];
+    snprintf(line, sizeof line,
+             "%s fb=%u HUD=%d/%d scale=%.3f,%.3f VP=%d,%d,%d,%d SC=%d,%d,%d,%d",
+             names[pass], bound_fb, hud_on, hud_seen, place->sx, place->sy,
+             viewport[0], viewport[1], viewport[2], viewport[3], scissor[0], scissor[1], scissor[2], scissor[3]);
+    rt_platform_graphics_event(line);
+}
+#endif
+
+static void wide_set(const struct place *p, enum wide_pass pass) {
     static struct place last;
     T_glViewport vp = F(glViewport);
     T_glScissor sc = F(glScissor);
-    if (!wide_dirty && !memcmp(p, &last, sizeof last)) return;
+    int changed = wide_dirty || memcmp(p, &last, sizeof last);
+#ifdef NOVA_FRAME_LOG
+    if (!changed && !atomic_load(&trace_enabled)) return;
+#else
+    if (!changed) return;
+#endif
+    I viewport[] = {lroundf(game_vp[0] * p->sx + p->ox), lroundf(game_vp[1] * p->sy + p->oy),
+                    lroundf(game_vp[2] * p->sx), lroundf(game_vp[3] * p->sy)};
+    I scissor[] = {lroundf(game_sc[0] * p->sx + p->ox), lroundf(game_sc[1] * p->sy + p->oy),
+                   lroundf(game_sc[2] * p->sx), lroundf(game_sc[3] * p->sy)};
+#ifdef NOVA_FRAME_LOG
+    trace_wide_pass(pass, p, viewport, scissor);
+#else
+    (void)pass;
+#endif
+    if (!changed) return;
     wide_dirty = 0;
     last = *p;
-    vp((I)lroundf(game_vp[0] * p->sx + p->ox), (I)lroundf(game_vp[1] * p->sy + p->oy),
-       (I)lroundf(game_vp[2] * p->sx), (I)lroundf(game_vp[3] * p->sy));
-    sc((I)lroundf(game_sc[0] * p->sx + p->ox), (I)lroundf(game_sc[1] * p->sy + p->oy),
-       (I)lroundf(game_sc[2] * p->sx), (I)lroundf(game_sc[3] * p->sy));
+    vp(viewport[0], viewport[1], viewport[2], viewport[3]);
+    sc(scissor[0], scissor[1], scissor[2], scissor[3]);
 }
 
 /* A batch of triangles holding several separate 2D elements (the HUD's buttons in one draw): the triangles are grouped
@@ -992,7 +1013,7 @@ static int wide_split(I count) {
         for (int t = 0; t < nt; t++)
             if (group[t] == g) for (int k = 0; k < 3; k++) out[n++] = (uint16_t)ext_i[3 * t + k];
         wide_place(glo[g], ghi[g], gxa[g], gxb[g], &p);
-        wide_set(&p);
+        wide_set(&p, PASS_BATCH);
         de(0x0004, n, 0x1403, out);
     }
     if (element_buffer) bb(GL_ELEMENT_ARRAY_BUFFER, element_buffer);
@@ -1042,7 +1063,9 @@ static int wide_apply(int kind, E mode, I first, I count, E itype, const void *i
             wide_place(lo, hi, ext_xa, ext_xb, &p);
         }
     }
-    wide_set(&p);
+    enum wide_pass pass = !on ? PASS_OFFSCREEN : clip && (!want || !kind) ? PASS_CLIPPED
+                         : !kind ? PASS_CLEAR : want ? PASS_3D : PASS_2D;
+    wide_set(&p, pass);
     return 0;
 }
 
@@ -1073,18 +1096,22 @@ static void trace_gl_frame(void) {
     gf(0x0BA6, modelview);
     gf(0x0BA7, projection);
     gf(0x0B70, depth_range);
-    char line[480];
+    char line[900];
     snprintf(line, sizeof line,
              "HUD %d/%d hit %d | logical %dx%d FBO %d (%dx%d) packed=%x final=%x\n"
              "VP iOS %d,%d,%d,%d GL %d,%d,%d,%d | SC %d %d,%d,%d,%d\n"
-             "P %g,%g,%g,%g MV %g,%g,%g,%g | cull %d/%x/%x mode=%d\n"
+             "P(column-major) %g,%g,%g,%g / %g,%g,%g,%g / %g,%g,%g,%g / %g,%g,%g,%g\n"
+             "MV %g,%g,%g,%g | cull %d/%x/%x mode=%s\n"
              "depth %d/%d/%x range %.2f:%.2f stencil %d bits %d/%d",
              hud_on, hud_seen, hit_cur_n, drawable_w, drawable_h, fbo, present_w, present_h, packed_status, depth_status,
              game_vp[0], game_vp[1], game_vp[2], game_vp[3], viewport[0], viewport[1], viewport[2], viewport[3],
              *cap_slot(0x0C11), scissor[0], scissor[1], scissor[2], scissor[3],
-             projection[0], projection[5], projection[11], projection[15],
+             projection[0], projection[1], projection[2], projection[3],
+             projection[4], projection[5], projection[6], projection[7],
+             projection[8], projection[9], projection[10], projection[11],
+             projection[12], projection[13], projection[14], projection[15],
              modelview[0], modelview[5], modelview[10], modelview[15],
-             *cap_slot(0x0B44), cull, front, atomic_load(&cull_override), *cap_slot(0x0B71), depth_mask,
+             *cap_slot(0x0B44), cull, front, atomic_load(&cull_override) ? "face-culling-off" : "original", *cap_slot(0x0B71), depth_mask,
              depth_func, depth_range[0], depth_range[1], *cap_slot(0x0B90), depth_bits, stencil_bits);
     rt_platform_graphics_sample(line);
     rt_log("graphics %s", line);
@@ -1564,9 +1591,6 @@ IMP(glFlush) { T_glFlush f = F(glFlush); if (f) f(); }
 IMP(glFrontFace) {
     T_glFrontFace f = F(glFrontFace);
     E face = A(0);
-#ifdef NOVA_FRAME_LOG
-    if (face == 0x0900 || face == 0x0901) guest_front_face = face;
-#endif
     if (f) f(face);
 }
 IMP(glHint) { T_glHint f = F(glHint); if (f) f(A(0), A(1)); }
